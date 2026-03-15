@@ -120,9 +120,9 @@ function copyDirSync(src, dst) {
     if (entry.isDirectory()) {
       copyDirSync(s, d);
     } else {
-      // 目标文件可能是只读的，先解除再覆盖
+      // 目标文件可能是只读的，先解除再覆盖（Windows NTFS 不支持 POSIX 权限，静默跳过）
       if (fs.existsSync(d)) {
-        fs.chmodSync(d, 0o644);
+        try { fs.chmodSync(d, 0o644); } catch {}
       }
       fs.copyFileSync(s, d);
     }

@@ -193,6 +193,14 @@ app.post("/api/plan-mode", async (req) => {
   return { ok: true, enabled: engine.planMode };
 });
 
+// 远程关闭（供 desktop 端复用 server 退出时调用，跨平台可靠的 graceful shutdown）
+app.post("/api/shutdown", async () => {
+  console.log("[server] 收到 HTTP shutdown 请求，正在清理...");
+  // 异步执行，先返回响应
+  setTimeout(() => gracefulShutdown(), 100);
+  return { ok: true };
+});
+
 // ── 启动服务器 ──
 const port = parseInt(process.env.HANA_PORT) || 0; // 0 = OS 分配
 const host = "127.0.0.1";
@@ -295,6 +303,7 @@ async function gracefulShutdown() {
 
 process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
+if (process.platform === "win32") process.on("SIGBREAK", gracefulShutdown);
 
 // 全局未捕获错误（写入持久化日志，防止崩溃无痕）
 process.on("uncaughtException", (err) => {
