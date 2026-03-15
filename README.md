@@ -13,7 +13,7 @@
 <p align="center">A personal AI agent with memory and soul</p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://github.com/liliMozi/openhanako/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/liliMozi/openhanako/releases)
 
 ---
 
@@ -54,11 +54,15 @@ As a tool, it is powerful: it remembers everything you've said, operates your co
 
 ### Download
 
-macOS (Apple Silicon): download the latest `.dmg` from [Releases](https://github.com/liliMozi/openhanako/releases).
+**macOS (Apple Silicon):** download the latest `.dmg` from [Releases](https://github.com/liliMozi/openhanako/releases).
 
 > **macOS Gatekeeper notice:** The app is not yet signed with an Apple Developer ID. On first launch, macOS may block it. Right-click the app → select **Open** → click **Open** in the dialog. You only need to do this once.
 
-Windows and Linux builds are coming soon.
+**Windows:** download the latest `.exe` installer from [Releases](https://github.com/liliMozi/openhanako/releases).
+
+> **Windows SmartScreen notice:** The installer is not yet code-signed. Windows Defender SmartScreen may show a warning on first run. Click **More info** → **Run anyway**. This is expected for unsigned builds.
+
+Linux builds are planned.
 
 ### First Run
 
@@ -95,7 +99,7 @@ The engine layer coordinates five managers (Agent, Session, Model, Preferences, 
 |----------|--------|
 | macOS (Apple Silicon) | Supported |
 | macOS (Intel) | Untested, should work |
-| Windows | Planned |
+| Windows | Beta |
 | Linux | Planned |
 | Mobile | Planned |
 

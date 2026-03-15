@@ -13,7 +13,7 @@
 <p align="center">一个有记忆、有灵魂的私人 AI 助理</p>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)](https://github.com/liliMozi/openhanako/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](https://github.com/liliMozi/openhanako/releases)
 
 ---
 
@@ -61,11 +61,15 @@ OpenHanako 是一个更加易用的 AI agent，有记忆，有性格，会主动
 
 ### 下载安装
 
-macOS (Apple Silicon)：从 [Releases](https://github.com/liliMozi/openhanako/releases) 下载最新 `.dmg`。
+**macOS (Apple Silicon)**：从 [Releases](https://github.com/liliMozi/openhanako/releases) 下载最新 `.dmg`。
 
 > **macOS 安全提示：** 应用尚未使用 Apple Developer ID 签名。首次打开时 macOS 可能会拦截，右键点击应用 → 选择**打开** → 在弹窗中点击**打开**即可，只需操作一次。
 
-Windows 和 Linux 版本即将推出，下一个大功能做好就开始做移植相关工作，尽请期待。
+**Windows**：从 [Releases](https://github.com/liliMozi/openhanako/releases) 下载最新 `.exe` 安装包。
+
+> **Windows SmartScreen 提示：** 安装包暂未经过代码签名，首次运行时 Windows Defender SmartScreen 可能会拦截，点击**更多信息** → **仍要运行**即可，未签名版本的正常现象。
+
+Linux 版本计划中。
 
 ### 首次运行
 
@@ -103,7 +107,7 @@ skills2set/     内置技能定义
 |------|------|
 | macOS (Apple Silicon) | 已支持 |
 | macOS (Intel) | 未测试，理论可用 |
-| Windows | 计划中 |
+| Windows | Beta |
 | Linux | 计划中 |
 | 移动端 | 计划中 |
 
