@@ -21,21 +21,22 @@ let _switchVersion = 0;
 // 消息加载（从 app-messages-shim 迁移）
 // ══════════════════════════════════════════════════════
 
-export async function loadMessages(): Promise<void> {
+export async function loadMessages(forPath?: string): Promise<void> {
+  const targetPath = forPath || useStore.getState().currentSessionPath;
+  if (!targetPath) return;
   try {
-    const res = await hanaFetch('/api/sessions/messages');
+    const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}`);
     const data = await res.json();
-    if (data.todos && data.todos.length > 0) {
-      useStore.setState({ sessionTodos: data.todos });
-    }
+    // 总是更新 todos（包括清空），避免残留上一个 session 的 todo
+    useStore.setState({ sessionTodos: data.todos || [] });
     const items = buildItemsFromHistory(data);
-    const s = useStore.getState();
-    const sessionPath = s.currentSessionPath;
-    if (sessionPath && items.length > 0) {
-      s.initSession(sessionPath, items, data.hasMore ?? false);
-      useStore.setState({ welcomeVisible: false });
-    } else if (sessionPath) {
-      s.initSession(sessionPath, [], false);
+    if (items.length > 0) {
+      useStore.getState().initSession(targetPath, items, data.hasMore ?? false);
+      if (targetPath === useStore.getState().currentSessionPath) {
+        useStore.setState({ welcomeVisible: false });
+      }
+    } else {
+      useStore.getState().initSession(targetPath, [], false);
     }
   } catch (err) { console.error('[loadMessages] error:', err); }
 }
@@ -131,7 +132,7 @@ export async function switchSession(path: string): Promise<void> {
     // 如果 store 中没有该 session 的消息数据，加载之
     const hasData = !!useStore.getState().chatSessions?.[path];
     if (!hasData) {
-      await loadMessages();
+      await loadMessages(path);
     }
 
     // 加载 desk files

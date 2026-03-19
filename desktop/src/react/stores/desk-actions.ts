@@ -7,14 +7,7 @@
 import { useStore } from './index';
 import { hanaFetch } from '../hooks/use-hana-fetch';
 import { clearChat } from './agent-actions';
-
-// 延迟获取避免循环依赖：desk-actions → SidebarLayout → desk-actions
-let _hideFloatCardFn: (() => void) | null = null;
-let _applyTbToggleFn: (() => void) | null = null;
-export function _injectSidebarFns(hide: () => void, toggle: () => void) {
-  _hideFloatCardFn = hide;
-  _applyTbToggleFn = toggle;
-}
+import { hideFloatCard, applyTbToggleState } from '../components/SidebarLayout';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -244,11 +237,11 @@ export function toggleJianSidebar(forceOpen?: boolean): void {
   const jianSidebar = document.getElementById('jianSidebar');
   if (newOpen) {
     jianSidebar?.classList.remove('collapsed');
-    _hideFloatCardFn?.();
+    hideFloatCard();
   } else {
     jianSidebar?.classList.add('collapsed');
   }
-  _applyTbToggleFn?.();
+  applyTbToggleState();
 }
 
 export function initJian(): void {

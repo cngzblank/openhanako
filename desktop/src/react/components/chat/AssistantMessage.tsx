@@ -103,7 +103,7 @@ const ContentBlockView = memo(function ContentBlockView({ block, agentName, yuan
     case 'artifact':
       return <ArtifactCard title={block.title} artifactType={block.artifactType} artifactId={block.artifactId} content={block.content} language={block.language} />;
     case 'browser_screenshot':
-      return <img className="browser-screenshot" src={`data:${block.mimeType};base64,${block.base64}`} alt="screenshot" />;
+      return <BrowserScreenshot base64={block.base64} mimeType={block.mimeType} />;
     case 'skill':
       return <SkillCard skillName={block.skillName} skillFilePath={block.skillFilePath} />;
     case 'cron_confirm':
@@ -193,6 +193,30 @@ const SkillCard = memo(function SkillCard({ skillName, skillFilePath }: { skillN
         <path d="M2 12l10 5 10-5" />
       </svg>
       <span>{skillName}</span>
+    </div>
+  );
+});
+
+const BrowserScreenshot = memo(function BrowserScreenshot({ base64, mimeType }: { base64: string; mimeType: string }) {
+  const handleClick = () => {
+    const artId = `browser-ss-${Date.now()}`;
+    const artifact = {
+      id: artId,
+      type: 'image',
+      title: '浏览器截图',
+      content: base64,
+      ext: mimeType === 'image/jpeg' ? 'jpg' : 'png',
+    };
+    const s = useStore.getState();
+    const arts = [...s.artifacts];
+    if (!arts.find(a => a.id === artId)) arts.push(artifact);
+    s.setArtifacts(arts);
+    openPreview(artifact);
+  };
+
+  return (
+    <div className="browser-screenshot" onClick={handleClick} style={{ cursor: 'pointer' }}>
+      <img src={`data:${mimeType};base64,${base64}`} alt="浏览器截图" />
     </div>
   );
 });

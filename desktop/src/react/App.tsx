@@ -39,9 +39,9 @@ declare function t(key: string, vars?: Record<string, string | number>): string;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// ── 主题加载（在 init 中调用，确保 theme.js 已执行） ──
-try { loadSavedTheme(); } catch { /* theme.js may not be loaded yet */ }
-try { loadSavedFont(); } catch { /* theme.js may not be loaded yet */ }
+// ── 主题加载 ──
+loadSavedTheme();
+loadSavedFont();
 
 // ── 全局 drag 阻止（防止 Electron 默认文件拖入导航） ──
 document.addEventListener('dragover', (e) => e.preventDefault());
@@ -70,12 +70,10 @@ window.addEventListener('unhandledrejection', (e) => {
 
 async function init(): Promise<void> {
   const platform = window.platform;
-  console.log('[init] start');
 
   // 1. 获取 server 连接信息并存入 Zustand
   const serverPort = await platform.getServerPort();
   const serverToken = await platform.getServerToken();
-  console.log('[init] port:', serverPort);
   useStore.setState({ serverPort, serverToken });
 
   if (!serverPort) {
@@ -120,8 +118,6 @@ async function init(): Promise<void> {
   } catch (err) {
     console.error('[init] i18n/health/config failed:', err);
   }
-
-  console.log('[init] health/config/i18n done');
 
   // 8. 连接 WebSocket
   connectWebSocket();
@@ -225,7 +221,6 @@ async function init(): Promise<void> {
   });
 
   // 20. 通知 app ready
-  console.log('[init] calling appReady');
   platform.appReady();
 }
 
@@ -328,7 +323,6 @@ function App() {
   useSidebarResize();
 
   useEffect(() => {
-    console.log('[App] useEffect fired, calling init');
     init().catch((err: unknown) => {
       console.error('[init] 初始化异常:', err);
       window.platform?.appReady?.();

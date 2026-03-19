@@ -18,8 +18,8 @@ import { yuanFallbackAvatar } from '../utils/agent-helpers';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // ── 稳定头像时间戳（避免每次渲染生成新 URL） ──
-let _avatarTs = _avatarTs;
-export function refreshAvatarTs() { _avatarTs = _avatarTs; }
+let _avatarTs = Date.now();
+export function refreshAvatarTs() { _avatarTs = Date.now(); }
 
 // ── 主组件 ──
 
