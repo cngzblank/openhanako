@@ -83,10 +83,12 @@ export function createModelsRoute(engine) {
       const raw = body.modelId;
       if (!raw) return c.json({ error: "modelId required" }, 400);
 
-      // modelId 可能是字符串或 {id, provider} 对象
-      const { id: parsedId, provider: parsedProvider } = parseModelRef(raw);
-      const modelId = parsedId;
-      const provider = body.provider || parsedProvider;
+      // 统一解析：接受 {id,provider} 对象、裸字符串、或 body.provider 补充
+      const parsed = parseModelRef(raw);
+      const modelId = parsed.id;
+      const provider = body.provider || parsed.provider;
+      if (!modelId) return c.json({ error: "modelId required" }, 400);
+
       const model = findModel(engine.availableModels, modelId, provider);
       if (!model) return c.json({ error: `model "${modelId}" not found` }, 404);
 

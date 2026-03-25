@@ -15,9 +15,13 @@ export function parseModelRef(ref) {
   return { id: String(ref), provider: "" };
 }
 
-/** 在 availableModels 中用复合键查找 */
+/** 在 availableModels 中用复合键查找（id 参数兼容 {id, provider} 对象） */
 export function findModel(available, id, provider) {
   if (!available || !id) return null;
+  // 兼容 {id, provider} 对象作为第二个参数
+  if (typeof id === "object" && id.id) {
+    return findModel(available, id.id, id.provider || provider);
+  }
   if (provider) {
     const exact = available.find(m => m.id === id && m.provider === provider);
     if (exact) return exact;

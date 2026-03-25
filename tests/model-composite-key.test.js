@@ -41,6 +41,26 @@ describe("Model composite key", () => {
       expect(findModel(models, "")).toBeNull();
       expect(findModel(null, "gpt-4o")).toBeNull();
     });
+
+    it("{id, provider} 对象作为第二个参数", () => {
+      const m = findModel(models, { id: "minimax-2.5", provider: "dashscope" });
+      expect(m.provider).toBe("dashscope");
+    });
+
+    it("{id} 对象无 provider 时 fallback 到第一个匹配", () => {
+      const m = findModel(models, { id: "gpt-4o" });
+      expect(m.provider).toBe("openai");
+    });
+
+    it("{id, provider} 对象 + 第三个参数 provider 时，对象的 provider 优先", () => {
+      const m = findModel(models, { id: "minimax-2.5", provider: "minimax" }, "dashscope");
+      expect(m.provider).toBe("minimax");
+    });
+
+    it("{id} 对象无 provider 时，第三个参数补充 provider", () => {
+      const m = findModel(models, { id: "minimax-2.5" }, "dashscope");
+      expect(m.provider).toBe("dashscope");
+    });
   });
 
   describe("parseModelRef", () => {
