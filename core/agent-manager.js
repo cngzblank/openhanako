@@ -448,11 +448,10 @@ export class AgentManager {
     ag._onInstallCallback = async (skillName) => {
       const skills = this._d.getSkills();
       await skills.reload(this._d.getResourceLoader?.(), this._agents);
-      const enabled = new Set(this.agent.config?.skills?.enabled || []);
+      const enabled = new Set(ag.config?.skills?.enabled || []);
       enabled.add(skillName);
-      // updateConfig 通过 engine 层面调用
-      this.agent.updateConfig({ skills: { enabled: [...enabled] } });
-      skills.syncAgentSkills(this.agent);
+      ag.updateConfig({ skills: { enabled: [...enabled] } });
+      skills.syncAgentSkills(ag);
     };
     ag._notifyHandler = (title, body) => {
       this._d.getHub()?.eventBus?.emit({ type: "notification", title, body }, null);

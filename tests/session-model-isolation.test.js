@@ -8,10 +8,13 @@ describe("Session model isolation", () => {
       _sessions: sessions,
       get currentSessionPath() { return currentPath; },
       set currentSessionPath(p) { currentPath = p; },
-      updateCurrentSessionModelId(modelId) {
+      updateCurrentSessionModel(modelId, provider) {
         if (!currentPath) return;
         const entry = sessions.get(currentPath);
-        if (entry) entry.modelId = modelId;
+        if (entry) {
+          entry.modelId = modelId;
+          if (provider !== undefined) entry.modelProvider = provider;
+        }
       },
       getCurrentSessionModelId() {
         if (!currentPath) return null;
@@ -22,27 +25,29 @@ describe("Session model isolation", () => {
 
   it("createSession stores modelId in SessionEntry", () => {
     const coord = createMockCoordinator({
-      "/path/session-a": { modelId: "gpt-4o", session: {}, agentId: "hana" },
+      "/path/session-a": { modelId: "gpt-4o", modelProvider: "openai", session: {}, agentId: "hana" },
     });
     expect(coord.getCurrentSessionModelId()).toBe("gpt-4o");
   });
 
-  it("updateCurrentSessionModelId changes the active session's modelId only", () => {
+  it("updateCurrentSessionModel changes the active session's modelId and provider", () => {
     const coord = createMockCoordinator({
-      "/path/session-a": { modelId: "gpt-4o", session: {}, agentId: "hana" },
-      "/path/session-b": { modelId: "claude-3-5-sonnet", session: {}, agentId: "hana" },
+      "/path/session-a": { modelId: "gpt-4o", modelProvider: "openai", session: {}, agentId: "hana" },
+      "/path/session-b": { modelId: "claude-3-5-sonnet", modelProvider: "anthropic", session: {}, agentId: "hana" },
     });
     coord.currentSessionPath = "/path/session-a";
-    coord.updateCurrentSessionModelId("qwen-72b");
+    coord.updateCurrentSessionModel("qwen-72b", "dashscope");
 
     expect(coord._sessions.get("/path/session-a").modelId).toBe("qwen-72b");
+    expect(coord._sessions.get("/path/session-a").modelProvider).toBe("dashscope");
     expect(coord._sessions.get("/path/session-b").modelId).toBe("claude-3-5-sonnet");
+    expect(coord._sessions.get("/path/session-b").modelProvider).toBe("anthropic");
   });
 
   it("switching session path changes getCurrentSessionModelId", () => {
     const coord = createMockCoordinator({
-      "/path/session-a": { modelId: "gpt-4o", session: {}, agentId: "hana" },
-      "/path/session-b": { modelId: "claude-3-5-sonnet", session: {}, agentId: "hana" },
+      "/path/session-a": { modelId: "gpt-4o", modelProvider: "openai", session: {}, agentId: "hana" },
+      "/path/session-b": { modelId: "claude-3-5-sonnet", modelProvider: "anthropic", session: {}, agentId: "hana" },
     });
     coord.currentSessionPath = "/path/session-a";
     expect(coord.getCurrentSessionModelId()).toBe("gpt-4o");
@@ -51,9 +56,9 @@ describe("Session model isolation", () => {
     expect(coord.getCurrentSessionModelId()).toBe("claude-3-5-sonnet");
   });
 
-  it("updateCurrentSessionModelId is no-op when no active session", () => {
+  it("updateCurrentSessionModel is no-op when no active session", () => {
     const coord = createMockCoordinator({});
-    coord.updateCurrentSessionModelId("gpt-4o");
+    coord.updateCurrentSessionModel("gpt-4o", "openai");
     expect(coord.getCurrentSessionModelId()).toBeNull();
   });
 });

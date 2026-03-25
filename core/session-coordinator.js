@@ -368,12 +368,15 @@ export class SessionCoordinator {
     this._d.emitDevLog(`Plan Mode: ${entry.planMode ? "ON (只读)" : "OFF (正常)"}`, "info");
   }
 
-  /** 更新当前焦点 session 的 modelId 快照 */
-  updateCurrentSessionModelId(modelId) {
+  /** 更新当前焦点 session 的模型快照 */
+  updateCurrentSessionModel(modelId, provider) {
     const sp = this.currentSessionPath;
     if (!sp) return;
     const entry = this._sessions.get(sp);
-    if (entry) entry.modelId = modelId;
+    if (entry) {
+      entry.modelId = modelId;
+      if (provider !== undefined) entry.modelProvider = provider;
+    }
   }
 
   /** 获取当前焦点 session 的 modelId 快照 */

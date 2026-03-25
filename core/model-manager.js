@@ -145,7 +145,9 @@ export class ModelManager {
    */
   _enrichFromKnownModels() {
     for (const m of this._availableModels) {
-      const known = _knownModels[m.id];
+      // 优先精确匹配，fallback 去掉 DashScope 的 Vendor/ 前缀再查
+      const known = _knownModels[m.id]
+        || (m.id.includes("/") ? _knownModels[m.id.split("/").pop()] : null);
       if (!known) continue;
       if (known.context && known.context > (m.contextWindow || 0)) {
         m.contextWindow = known.context;

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useSettingsStore, type ProviderSummary } from '../store';
 import { hanaFetch } from '../api';
-import { t, PROVIDER_PRESETS } from '../helpers';
+import { t, PROVIDER_PRESETS, favKey } from '../helpers';
 import { loadSettingsConfig } from '../actions';
 import { ProviderDetail } from './providers/ProviderDetail';
 import { AddCustomButton } from './providers/ProviderList';
@@ -46,8 +46,8 @@ export function ProvidersTab() {
   const renderRegistered = (id: string) => {
     const p = providersSummary[id];
     const preset = PROVIDER_PRESETS.find(pr => pr.value === id);
-    const favCount = (p.models || []).filter(m => pendingFavorites.has(m)).length
-      + (p.custom_models || []).filter(m => pendingFavorites.has(m)).length;
+    const favCount = (p.models || []).filter(m => pendingFavorites.has(favKey(id, m))).length
+      + (p.custom_models || []).filter(m => pendingFavorites.has(favKey(id, m))).length;
     const totalCount = (p.models || []).length + (p.custom_models || []).length;
     return (
       <button

@@ -265,7 +265,7 @@ export class BridgeSessionManager {
       return capturedText.trim() || null;
     } catch (err) {
       console.error(`[bridge-session] external message failed (${sessionKey}):`, err.message);
-      return null;
+      return { __bridgeError: true, message: err.message };
     }
   }
 

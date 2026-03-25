@@ -255,7 +255,7 @@ export class ConfigCoordinator {
     }
     // 同步更新当前 session 的快照
     const sessionCoord = this._d.getSessionCoordinator();
-    sessionCoord?.updateCurrentSessionModelId(modelId);
+    sessionCoord?.updateCurrentSessionModel(modelId, provider);
     this.persistSessionMeta();
   }
 
@@ -349,7 +349,7 @@ export class ConfigCoordinator {
         }
         // 同步 SessionEntry 快照
         const sessionCoord = this._d.getSessionCoordinator();
-        sessionCoord?.updateCurrentSessionModelId(chatId);
+        sessionCoord?.updateCurrentSessionModel(chatId, newModel.provider);
         this.persistSessionMeta();
       }
     }

@@ -26,10 +26,12 @@ export class PreferencesManager {
     } catch { return {}; }
   }
 
-  /** 写入全局 preferences */
+  /** 写入全局 preferences（tmp+rename 原子写，防 crash 截断） */
   savePreferences(prefs) {
     fs.mkdirSync(this._userDir, { recursive: true });
-    fs.writeFileSync(this._path, JSON.stringify(prefs, null, 2) + "\n", "utf-8");
+    const tmp = this._path + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(prefs, null, 2) + "\n", "utf-8");
+    fs.renameSync(tmp, this._path);
   }
 
   /** 读取沙盒模式偏好 */
