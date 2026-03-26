@@ -74,7 +74,7 @@ export function ModelSelector({ models, disabled }: { models: Array<{ id: string
                 )}
                 {items.map(m => (
                   <button
-                    key={m.id}
+                    key={`${m.provider}/${m.id}`}
                     className={`${styles['model-option']}${m.isCurrent ? ` ${styles.active}` : ''}`}
                     onClick={() => switchModel(m.id, m.provider)}
                   >

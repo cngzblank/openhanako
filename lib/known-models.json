@@ -98,8 +98,7 @@
       "name": "Kimi K2.5",
       "context": 262144,
       "maxOutput": 262144,
-      "vision": true,
-      "reasoning": true
+      "vision": true
     },
     "kimi-k2": {
       "name": "Kimi K2",

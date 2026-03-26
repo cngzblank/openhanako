@@ -29,9 +29,8 @@ if (!fs.existsSync(target)) {
 let code = fs.readFileSync(target, "utf8");
 
 if (code.includes("baseToolsOverride")) {
-  console.log("[patch-pi-sdk] already patched, skipping");
-  process.exit(0);
-}
+  console.log("[patch-pi-sdk] sdk.js already patched, skipping patch 1");
+} else {
 
 const needle = "        initialActiveToolNames,\n        extensionRunnerRef,";
 const replacement =
@@ -43,12 +42,51 @@ const replacement =
 
 if (!code.includes(needle)) {
   console.warn(
-    "[patch-pi-sdk] sdk.js structure changed, cannot apply patch " +
+    "[patch-pi-sdk] sdk.js structure changed, cannot apply patch 1 " +
     "— custom bash tools may not work on Windows"
   );
-  process.exit(0);
-}
+} else {
 
-code = code.replace(needle, replacement);
-fs.writeFileSync(target, code, "utf8");
-console.log("[patch-pi-sdk] patched createAgentSession → baseToolsOverride wired through");
+  code = code.replace(needle, replacement);
+  fs.writeFileSync(target, code, "utf8");
+  console.log("[patch-pi-sdk] patched createAgentSession → baseToolsOverride wired through");
+}}
+
+// ── Patch 2: pi-ai openai-completions.js ──
+// dashscope/volcengine 等 API 不接受 tools: []（空数组返回 400）。
+// Pi SDK 在对话历史有 tool_calls 但当前 turn 无工具时发 tools: []，
+// 这是为了兼容 Anthropic proxy，但对其他 API 有害。
+// 补丁：发请求前删除空 tools 数组。
+const completionsTarget = path.join(
+  __dirname, "..",
+  "node_modules", "@mariozechner", "pi-ai",
+  "dist", "providers", "openai-completions.js"
+);
+
+if (fs.existsSync(completionsTarget)) {
+  let completionsCode = fs.readFileSync(completionsTarget, "utf8");
+
+  if (completionsCode.includes("/* patched: strip empty tools */")) {
+    console.log("[patch-pi-sdk] openai-completions.js already patched, skipping");
+  } else {
+    // 在 tools: [] 赋值之后，tool_choice 赋值之前，插入清理逻辑
+    const toolsNeedle = '        params.tools = [];\n    }\n    if (options?.toolChoice) {';
+    const toolsReplacement =
+      '        params.tools = [];\n    }\n' +
+      '    /* patched: strip empty tools */\n' +
+      '    if (Array.isArray(params.tools) && params.tools.length === 0) {\n' +
+      '        delete params.tools;\n' +
+      '    }\n' +
+      '    if (options?.toolChoice) {';
+
+    if (completionsCode.includes(toolsNeedle)) {
+      completionsCode = completionsCode.replace(toolsNeedle, toolsReplacement);
+      fs.writeFileSync(completionsTarget, completionsCode, "utf8");
+      console.log("[patch-pi-sdk] patched openai-completions.js → strip empty tools array");
+    } else {
+      console.warn("[patch-pi-sdk] openai-completions.js structure changed, cannot apply empty-tools patch");
+    }
+  }
+} else {
+  console.log("[patch-pi-sdk] openai-completions.js not found, skipping");
+}
