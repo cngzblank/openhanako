@@ -7,6 +7,13 @@ import styles from '../../Settings.module.css';
 
 const platform = window.platform;
 
+interface DiscoveredModel {
+  id: string;
+  name?: string;
+  context?: number | null;
+  maxOutput?: number | null;
+}
+
 export function ProviderModelList({ providerId, summary, onRefresh }: {
   providerId: string;
   summary: ProviderSummary;
@@ -15,9 +22,24 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
   const { showToast } = useSettingsStore();
   const [search, setSearch] = useState('');
   const [customInput, setCustomInput] = useState('');
+  const [discoveredModels, setDiscoveredModels] = useState<DiscoveredModel[]>([]);
+
+  const loadDiscoveredModels = async () => {
+    try {
+      const res = await hanaFetch(`/api/providers/${encodeURIComponent(providerId)}/discovered-models`);
+      const data = await res.json();
+      setDiscoveredModels(data.models || []);
+    } catch {
+      // cache miss is fine
+    }
+  };
+
+  useEffect(() => { loadDiscoveredModels(); }, [providerId]);
 
   const currentModels = summary.models || [];
-  const allModels = [...new Set([...currentModels, ...(summary.custom_models || [])])];
+  // Merge: discovered model IDs + custom_models, deduplicated, with currentModels included for display
+  const discoveredIds = discoveredModels.map(m => m.id);
+  const allModels = [...new Set([...currentModels, ...discoveredIds, ...(summary.custom_models || [])])];
   const query = search.toLowerCase();
   const filtered = query ? allModels.filter(m => m.toLowerCase().includes(query)) : allModels;
 
@@ -100,16 +122,11 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
       });
       const data = await res.json();
       if (data.error) { showFetchHint(t('settings.providers.fetchFailed'), false); return; }
-      const models = (data.models || []).map((m: { id?: string; name?: string }) => m.id || m.name);
+      const models = (data.models || []) as DiscoveredModel[];
       if (models.length === 0) { showFetchHint(t('settings.providers.fetchFailed'), false); return; }
-      await hanaFetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providers: { [providerId]: { models } } }),
-      });
+      // Backend already cached the results; just refresh the dropdown
+      setDiscoveredModels(models);
       showFetchHint(t('settings.providers.fetchSuccess', { name: providerId, n: models.length }), true);
-      await onRefresh();
-      platform?.settingsChanged?.('models-changed');
     } catch {
       showFetchHint(t('settings.providers.fetchFailed'), false);
     } finally {
@@ -230,6 +247,8 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
               {filtered.map(mid => {
                 const isAdded = currentModels.includes(mid);
                 const meta = lookupModelMeta(mid) || {};
+                const discovered = discoveredModels.find(d => d.id === mid);
+                const ctx = meta.context || discovered?.context;
                 return (
                   <button
                     key={mid}
@@ -238,7 +257,7 @@ export function ProviderModelList({ providerId, summary, onRefresh }: {
                   >
                     <span className={styles['pv-model-dropdown-option-name']}>{mid}</span>
                     {isAdded && <span className={styles['pv-model-dropdown-option-check']}>{'\u2713'}</span>}
-                    {meta.context && <span className={styles['pv-model-ctx']}>{formatContext(meta.context)}</span>}
+                    {ctx && <span className={styles['pv-model-ctx']}>{formatContext(ctx)}</span>}
                   </button>
                 );
               })}

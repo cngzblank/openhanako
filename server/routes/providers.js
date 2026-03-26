@@ -1,12 +1,47 @@
 /**
  * 供应商管理 REST 路由
  */
+import fs from "fs";
+import path from "path";
+import os from "os";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
 import { buildProviderAuthHeaders, buildProbeUrl } from "../../lib/llm/provider-client.js";
 
+// ── Models-cache helpers ──
+
+function getCachePath(engine) {
+  return path.join(engine.hanakoHome, "models-cache.json");
+}
+
+function readModelsCache(engine) {
+  try {
+    return JSON.parse(fs.readFileSync(getCachePath(engine), "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+/** Atomic write: tmp + rename to avoid partial reads */
+function writeModelsCache(engine, cache) {
+  const target = getCachePath(engine);
+  const tmp = target + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(cache, null, 2) + os.EOL);
+  fs.renameSync(tmp, target);
+}
+
 export function createProvidersRoute(engine) {
   const route = new Hono();
+
+  // ── Cache helper: persist discovered models per-provider ──
+  function saveToCache(providerName, models) {
+    if (!providerName || !models?.length) return;
+    try {
+      const cache = readModelsCache(engine);
+      cache[providerName] = { models, fetchedAt: new Date().toISOString() };
+      writeModelsCache(engine, cache);
+    } catch { /* best-effort; cache miss is harmless */ }
+  }
 
   // ── Provider Summary ──
 
@@ -216,7 +251,9 @@ export function createProvidersRoute(engine) {
         await engine.refreshAvailableModels();
         const registryModels = engine.availableModels.filter((model) => model.provider === name);
         if (registryModels.length > 0) {
-          return c.json({ source: "registry", models: normalizeRegistryModels(registryModels) });
+          const normalized = normalizeRegistryModels(registryModels);
+          saveToCache(name, normalized);
+          return c.json({ source: "registry", models: normalized });
         }
 
         return c.json({
@@ -252,15 +289,16 @@ export function createProvidersRoute(engine) {
         ? engine.modelRegistry.getAll().filter((m) => m.provider === name)
         : [];
       if (registryModels.length > 0) {
-        return c.json({ source: "registry", models: normalizeRegistryModels(registryModels) });
+        const normalized = normalizeRegistryModels(registryModels);
+        saveToCache(name, normalized);
+        return c.json({ source: "registry", models: normalized });
       }
       // fallback：从 default-models.json 返回默认模型列表
       const defaults = engine.providerRegistry?.getDefaultModels(name) || [];
       if (defaults.length > 0) {
-        return c.json({
-          source: "builtin",
-          models: defaults.map(id => ({ id, name: id, context: null, maxOutput: null })),
-        });
+        const builtinModels = defaults.map(id => ({ id, name: id, context: null, maxOutput: null }));
+        saveToCache(name, builtinModels);
+        return c.json({ source: "builtin", models: builtinModels });
       }
       return c.json({ error: "No built-in models found for this provider", models: [] });
     }
@@ -293,10 +331,23 @@ export function createProvidersRoute(engine) {
         maxOutput: m.max_completion_tokens || m.max_output_tokens || null,
       }));
 
+      saveToCache(name, models);
       return c.json({ models });
     } catch (err) {
       return c.json({ error: err.message, models: [] });
     }
+  });
+
+  /**
+   * 读取供应商已发现但尚未添加的模型（缓存）
+   * GET /api/providers/:name/discovered-models
+   */
+  route.get("/providers/:name/discovered-models", (c) => {
+    const providerName = c.req.param("name");
+    const cache = readModelsCache(engine);
+    const entry = cache[providerName];
+    if (!entry) return c.json({ models: [], fetchedAt: null });
+    return c.json({ models: entry.models || [], fetchedAt: entry.fetchedAt || null });
   });
 
   /**
