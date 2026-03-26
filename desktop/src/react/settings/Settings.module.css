@@ -3102,12 +3102,14 @@ a.about-link:hover {
 .pv-model-dropdown-trigger:hover { border-color: var(--accent); }
 
 .pv-model-dropdown-panel {
-    /* position/left/bottom/width/zIndex set by JS */
+    /* position/left/top/width/maxHeight/zIndex set by JS */
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: 0 4px 16px var(--shadow);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .pv-model-dropdown-search {

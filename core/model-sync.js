@@ -6,7 +6,6 @@
  */
 
 import fs from "fs";
-import path from "path";
 import { fromRoot } from "../shared/hana-root.js";
 
 const _knownModels = JSON.parse(fs.readFileSync(fromRoot("lib", "known-models.json"), "utf-8"));
