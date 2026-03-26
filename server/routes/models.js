@@ -4,7 +4,6 @@
 import { readFileSync } from "fs";
 import { Hono } from "hono";
 import { safeJson } from "../hono-helpers.js";
-import { supportsXhigh } from "@mariozechner/pi-ai";
 import { t } from "../i18n.js";
 import { fromRoot } from "../../shared/hana-root.js";
 import { findModel, modelRefEquals, parseModelRef } from "../../shared/model-ref.js";
@@ -38,43 +37,6 @@ export function createModelsRoute(engine) {
       return c.json({ error: err.message }, 500);
     }
   });
-
-  // 收藏模型列表（给聊天页面用，直接读 favorites，和设置页同源）
-  route.get("/models/favorites", async (c) => {
-    try {
-      const favorites = engine.readFavorites();
-      const available = engine.availableModels;
-      const overrides = engine.config?.models?.overrides;
-      const cur = engine.currentModel;
-
-      const result = [];
-      for (const item of favorites) {
-        const { id: modelId, provider: hintProvider } = parseModelRef(item);
-        if (!modelId) continue;
-        const m = findModel(available, modelId, hintProvider);
-        const provider = hintProvider || m?.provider || "";
-        if (!m && !hintProvider) continue;
-        result.push({
-          id: modelId,
-          name: resolveModelName(modelId, m?.name, overrides),
-          provider,
-          isCurrent: modelRefEquals({ id: modelId, provider }, cur),
-          reasoning: m ? !!m.reasoning : false,
-          xhigh: m ? supportsXhigh(m) : false,
-          vision: provider ? (engine.providerRegistry.get(provider)?.capabilities?.vision !== false) : true,
-        });
-      }
-
-      return c.json({
-        models: result,
-        current: cur?.id || null,
-        hasFavorites: favorites.length > 0,
-      });
-    } catch (err) {
-      return c.json({ error: err.message }, 500);
-    }
-  });
-
 
   // 健康检测：发一个最小请求测试模型连通性
   route.post("/models/health", async (c) => {

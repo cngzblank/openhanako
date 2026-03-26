@@ -275,8 +275,6 @@ export class HanaEngine {
   getUtilityApi() { return this._configCoord.getUtilityApi(); }
   setUtilityApi(p) { return this._configCoord.setUtilityApi(p); }
   resolveUtilityConfig() { return this._configCoord.resolveUtilityConfig(); }
-  readFavorites() { return this._configCoord.readFavorites(); }
-  async saveFavorites(f) { return this._configCoord.saveFavorites(f); }
   readAgentOrder() { return this._configCoord.readAgentOrder(); }
   saveAgentOrder(o) { return this._configCoord.saveAgentOrder(o); }
   async syncModelsAndRefresh() { return this._configCoord.syncAndRefresh(); }
@@ -421,10 +419,7 @@ export class HanaEngine {
   async init(log = () => {}) {
     const startupTimer = Date.now();
 
-    // 0a. Provider 迁移
-    this._configCoord.migrateProvidersToGlobal(log);
-
-    // 0b. Config scope 迁移（全局字段从 agent config → preferences）
+    // 0. Config scope 迁移（全局字段从 agent config → preferences）
     migrateConfigScope({
       agentsDir: this.agentsDir,
       prefs: this._prefs,

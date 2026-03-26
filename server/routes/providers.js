@@ -45,9 +45,6 @@ export function createProvidersRoute(engine) {
       }
     }
 
-    const favorites = engine.readFavorites();
-    const favSet = new Set(favorites);
-
     // OAuth provider 登录状态（Pi SDK AuthStorage，key 是 authJsonKey）
     const oauthProviders = engine.authStorage?.getOAuthProviders?.() || [];
     const oauthLoginMap = new Map();
@@ -174,7 +171,7 @@ export function createProvidersRoute(engine) {
       }
     }
 
-    return c.json({ providers: result, favorites });
+    return c.json({ providers: result });
   });
 
   // ── Fetch / Test ──

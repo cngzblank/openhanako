@@ -97,14 +97,6 @@ export function createConfigRoute(engine) {
             if (changed) {
               writeFileSync(modelsJsonPath, JSON.stringify(modelsJson, null, 4) + "\n", "utf-8");
             }
-            // 从 favorites 中移除已删 provider 的模型
-            if (orphanedModels.size > 0) {
-              const favorites = engine.readFavorites();
-              const cleaned = favorites.filter(id => !orphanedModels.has(id));
-              if (cleaned.length !== favorites.length) {
-                await engine.saveFavorites(cleaned);
-              }
-            }
           } catch {}
         }
         for (const [name, data] of Object.entries(agentPartial.providers)) {
@@ -472,38 +464,6 @@ export function createConfigRoute(engine) {
       return c.json({ error: err.message }, 500);
     } finally {
       tempStore?.close();
-    }
-  });
-
-  // ── 全局 Favorites（跨 agent 共享的收藏模型列表）──
-
-  route.get("/favorites", async (c) => {
-    try {
-      return c.json({ favorites: engine.readFavorites() });
-    } catch (err) {
-      return c.json({ error: err.message }, 500);
-    }
-  });
-
-  route.put("/favorites", async (c) => {
-    try {
-      const body = await safeJson(c);
-      const { favorites } = body;
-      if (!Array.isArray(favorites)) {
-        return c.json({ error: "favorites must be an array" }, 400);
-      }
-      // 验证每个元素是 string 或 {id, provider} 对象
-      for (const item of favorites) {
-        if (typeof item !== "string" && (typeof item !== "object" || !item?.id)) {
-          return c.json({ error: "each favorite must be a string or {id, provider} object" }, 400);
-        }
-      }
-      debugLog()?.log("api", `PUT /api/favorites (${favorites.length} items)`);
-      await engine.saveFavorites(favorites);
-      return c.json({ ok: true });
-    } catch (err) {
-      debugLog()?.error("api", `PUT /api/favorites failed: ${err.message}`);
-      return c.json({ error: err.message }, 500);
     }
   });
 

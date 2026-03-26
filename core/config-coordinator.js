@@ -1,21 +1,14 @@
 /**
  * ConfigCoordinator — 运行时配置管理
  *
- * 从 Engine 提取，负责模型/搜索/utility 配置读写、
- * updateConfig 联动、Plan Mode、记忆开关、Provider 迁移。
+ * 负责 per-agent 模型选择、共享模型角色、搜索/utility 配置、
+ * session meta 持久化、updateConfig 联动。
  * 不持有 engine 引用，通过构造器注入依赖。
  */
 import fs from "fs";
 import path from "path";
 import os from "os";
-import YAML from "js-yaml";
 import { createModuleLogger } from "../lib/debug-log.js";
-import {
-  clearConfigCache,
-  loadGlobalProviders,
-  loadModelsRegistry,
-  resolveApiKeyFromAuth,
-} from "../lib/memory/config-loader.js";
 import { findModel } from "../shared/model-ref.js";
 
 const log = createModuleLogger("config");
@@ -167,58 +160,6 @@ export class ConfigCoordinator {
       this.getSharedModels(),
       this.getUtilityApi(),
     );
-  }
-
-  // ── Favorites ──
-
-  readFavorites() {
-    const prefs = this._prefs();
-    const favorites = prefs.favorites || [];
-
-    // 主动迁移：裸字符串 → {id, provider} 对象
-    // 旧格式裸字符串无法正确归属 provider，
-    // 这里通过 providers.yaml 的 model 列表做一次性转换。
-    let migrated = false;
-    const globalProviders = loadGlobalProviders().providers || {};
-    // 建反查表：modelId → providerName（优先 providers.yaml，兜底 default-models）
-    const idToProvider = new Map();
-    for (const [name, p] of Object.entries(globalProviders)) {
-      for (const mid of (p.models || [])) {
-        if (!idToProvider.has(mid)) idToProvider.set(mid, name);
-      }
-    }
-
-    const result = favorites.map(item => {
-      if (typeof item === "object" && item?.id) return item; // 已是新格式
-      if (typeof item !== "string") return item;
-      const prov = idToProvider.get(item);
-      if (prov) {
-        migrated = true;
-        return { id: item, provider: prov };
-      }
-      return item; // 找不到 provider 的保持原样
-    });
-
-    if (migrated) {
-      prefs.favorites = result;
-      this._savePrefs(prefs);
-      log.log(`favorites migrated: ${result.filter(f => typeof f === "object").length} items converted`);
-    }
-
-    return result;
-  }
-
-  async saveFavorites(favorites) {
-    const prefs = this._prefs();
-    prefs.favorites = favorites;
-    this._savePrefs(prefs);
-    log.log(`saveFavorites: ${favorites.length} items`);
-
-    try {
-      await this.syncAndRefresh();
-    } catch (err) {
-      console.error("[config] favorites sync failed:", err.message);
-    }
   }
 
   // ── Agent Order ──
@@ -373,167 +314,6 @@ export class ConfigCoordinator {
         }
       }
     }
-  }
-
-  // ── Provider Migration ──
-
-  migrateProvidersToGlobal(log = () => {}) {
-    const YAML_LOAD = (p) => { try { return YAML.load(fs.readFileSync(p, "utf-8")) || {}; } catch { return {}; } };
-    const agentsDir = this._d.agentsDir;
-    const hanakoHome = this._d.hanakoHome;
-    const registryMigrationMarker = path.join(hanakoHome, ".providers-registry-migrated");
-
-    let entries;
-    try {
-      entries = fs.readdirSync(agentsDir, { withFileTypes: true });
-    } catch { return; }
-
-    const agentsToMigrate = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const configPath = path.join(agentsDir, entry.name, "config.yaml");
-      if (!fs.existsSync(configPath)) continue;
-      const raw = YAML_LOAD(configPath);
-      if (!raw.providers || Object.keys(raw.providers).length === 0) {
-        const hasInlineApi = raw.api?.api_key && raw.api.api_key.length > 0;
-        const hasInlineEmbed = raw.embedding_api?.api_key && raw.embedding_api.api_key.length > 0;
-        const hasInlineUtil = raw.utility_api?.api_key && raw.utility_api.api_key.length > 0;
-        if (!hasInlineApi && !hasInlineEmbed && !hasInlineUtil) continue;
-      }
-      agentsToMigrate.push({ id: entry.name, configPath, raw });
-    }
-
-    const globalData = loadGlobalProviders();
-    const globalProviders = globalData.providers || {};
-    let globalChanged = false;
-    let registryBackfilled = false;
-
-    const registry = loadModelsRegistry();
-    for (const [name, data] of Object.entries(registry.providers || {})) {
-      const provider = globalProviders[name] || (globalProviders[name] = {});
-      const existingAuthKey = resolveApiKeyFromAuth(name);
-
-      if (data?.baseUrl && !provider.base_url) {
-        provider.base_url = data.baseUrl;
-        globalChanged = true;
-        registryBackfilled = true;
-      }
-      if (data?.api && !provider.api) {
-        provider.api = data.api;
-        globalChanged = true;
-        registryBackfilled = true;
-      }
-      if (Array.isArray(data?.models) && data.models.length > 0) {
-        const existing = new Set(provider.models || []);
-        const before = existing.size;
-        for (const model of data.models) {
-          const id = typeof model === "string" ? model : model?.id;
-          if (id) existing.add(id);
-        }
-        if (existing.size > before) {
-          provider.models = [...existing];
-          globalChanged = true;
-          registryBackfilled = true;
-        }
-      }
-      if (data?.apiKey && !provider.api_key && !existingAuthKey) {
-        provider.api_key = data.apiKey;
-        globalChanged = true;
-        registryBackfilled = true;
-      }
-    }
-
-    for (const { id, configPath, raw } of agentsToMigrate) {
-      let configChanged = false;
-
-      if (raw.providers) {
-        for (const [name, data] of Object.entries(raw.providers)) {
-          if (!globalProviders[name]) {
-            globalProviders[name] = structuredClone(data);
-            globalChanged = true;
-          } else {
-            if (data.api_key && !globalProviders[name].api_key) {
-              globalProviders[name].api_key = data.api_key;
-              globalChanged = true;
-            }
-            if (data.base_url && !globalProviders[name].base_url) {
-              globalProviders[name].base_url = data.base_url;
-              globalChanged = true;
-            }
-            if (data.models?.length) {
-              const existing = new Set(globalProviders[name].models || []);
-              const before = existing.size;
-              for (const m of data.models) existing.add(m);
-              if (existing.size > before) {
-                globalProviders[name].models = [...existing];
-                globalChanged = true;
-              }
-            }
-          }
-        }
-        delete raw.providers;
-        configChanged = true;
-      }
-
-      for (const block of [raw.api, raw.embedding_api, raw.utility_api]) {
-        if (!block) continue;
-        if (block.api_key) {
-          const provName = typeof block.provider === "string" ? block.provider.trim() : "";
-          if (!provName) {
-            log.warn("skip inline API migration: missing explicit provider");
-            continue;
-          }
-          if (!globalProviders[provName]) globalProviders[provName] = {};
-          if (!globalProviders[provName].api_key) {
-            globalProviders[provName].api_key = block.api_key;
-            globalChanged = true;
-          }
-          if (block.base_url && !globalProviders[provName].base_url) {
-            globalProviders[provName].base_url = block.base_url;
-            globalChanged = true;
-          }
-          delete block.api_key;
-          delete block.base_url;
-          configChanged = true;
-        }
-      }
-
-      if (configChanged) {
-        const header = "# Hanako 系统配置\n# 由设置页面管理，手动编辑也可以\n\n";
-        const yamlStr = header + YAML.dump(raw, {
-          indent: 2, lineWidth: -1, sortKeys: false, quotingType: "\"", forceQuotes: false,
-        });
-        const tmpPath = configPath + ".tmp";
-        fs.writeFileSync(tmpPath, yamlStr, "utf-8");
-        fs.renameSync(tmpPath, configPath);
-        log(`  [migration] ${id}: providers 块已移除，内联凭证已清空`);
-      }
-    }
-
-    if (globalChanged) {
-      const providersPath = path.join(hanakoHome, "providers.yaml");
-      const header = "# Hanako 供应商配置（全局，跨 agent 共享）\n# 由设置页面管理\n\n";
-      const yamlStr = header + YAML.dump({ providers: globalProviders }, {
-        indent: 2, lineWidth: -1, sortKeys: false, quotingType: "\"", forceQuotes: false,
-      });
-      const tmpPath = providersPath + ".tmp";
-      fs.writeFileSync(tmpPath, yamlStr, "utf-8");
-      fs.renameSync(tmpPath, providersPath);
-      log(`  [migration] 全局 providers.yaml 已创建/更新`);
-    }
-
-    if (!fs.existsSync(registryMigrationMarker)) {
-      fs.writeFileSync(
-        registryMigrationMarker,
-        `${new Date().toISOString()}\n`,
-        "utf-8",
-      );
-      if (registryBackfilled) {
-        log("  [migration] models.json 中缺失的 provider 注册信息已补入 providers.yaml");
-      }
-    }
-
-    clearConfigCache();
   }
 
   normalizeUtilityApiPreferences(logFn = null) {

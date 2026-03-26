@@ -138,7 +138,6 @@ describe("model sync related routes", () => {
         },
       ],
       currentModel: { id: "gpt-5.4", name: "Gpt 5.4" },
-      readFavorites: vi.fn(() => ["gpt-5.4"]),
       config: {},
       providerRegistry: { get: () => ({ capabilities: {} }) },
     };
@@ -150,12 +149,6 @@ describe("model sync related routes", () => {
     expect(allRes.status).toBe(200);
     expect(allData.models[0].id).toBe("gpt-5.4");
     expect(allData.models[0].name).toBe("Gpt 5.4");
-
-    const favRes = await app.request("/api/models/favorites");
-    const favData = await favRes.json();
-    expect(favRes.status).toBe(200);
-    expect(favData.models[0].id).toBe("gpt-5.4");
-    expect(favData.models[0].name).toBe("Gpt 5.4");
   });
 
   it("provider fetch prefers Pi registry models for oauth providers", async () => {
