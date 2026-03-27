@@ -2207,6 +2207,12 @@ app.on("will-quit", () => {
 app.on("before-quit", async (event) => {
   isQuitting = true;
   isExitingServer = true; // Cmd+Q 走完全退出路径，连 server 一起关
+
+  // 立刻隐藏所有窗口，让用户感觉已退出，server 清理在后台进行
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.hide();
+  }
+
   // 完全退出：清理浏览器实例（仅在真正退出时执行，避免隐藏路径打断后台浏览器能力）
   for (const [sp, view] of _browserViews) {
     try { view.webContents.close(); } catch {}
