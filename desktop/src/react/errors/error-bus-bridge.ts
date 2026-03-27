@@ -13,9 +13,9 @@ import type { ErrorRoute } from './types';
 declare function t(key: string, vars?: Record<string, string | number>): string;
 
 export function initErrorBusBridge(): void {
-  errorBus.subscribe((entry: { error: { code: string; severity: string; userMessageKey: string } }, route: ErrorRoute) => {
+  errorBus.subscribe((entry: { error: { code: string; severity: string; userMessageKey: string; message?: string } }, route: ErrorRoute) => {
     const { error } = entry;
-    const userMessage = t(error.userMessageKey) || error.code;
+    const userMessage = error.message || t(error.userMessageKey) || error.code;
 
     switch (route) {
       case 'toast':

@@ -2001,8 +2001,8 @@ body.resizing .jian-sidebar-inner {
     pointer-events: auto;
 }
 .hana-toast.error {
-    background: var(--danger);
-    color: #fff;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
 }
 .hana-toast-close {
     display: flex;
