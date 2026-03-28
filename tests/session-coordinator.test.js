@@ -146,7 +146,7 @@ describe("SessionCoordinator", () => {
       listAgents: () => [],
     });
 
-    const result = await coordinator.executeIsolated("delegate task", {
+    const result = await coordinator.executeIsolated("subagent task", {
       signal: controller.signal,
     });
 

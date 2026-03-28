@@ -29,7 +29,7 @@ import { createExperienceTools } from "../lib/tools/experience.js";
 import { createInstallSkillTool } from "../lib/tools/install-skill.js";
 import { createNotifyTool } from "../lib/tools/notify-tool.js";
 import { createUpdateSettingsTool } from "../lib/tools/update-settings-tool.js";
-import { createDelegateTool } from "../lib/tools/delegate-tool.js";
+import { createSubagentTool } from "../lib/tools/subagent-tool.js";
 import { READ_ONLY_BUILTIN_TOOLS } from "./config-coordinator.js";
 import { formatSkillsForPrompt } from "@mariozechner/pi-coding-agent";
 import { runCompatChecks } from "../lib/compat/index.js";
@@ -321,10 +321,10 @@ export class Agent {
       },
     });
 
-    // 11. delegate 工具（sub-agent 委派）
-    this._delegateTool = createDelegateTool({
+    // 11. subagent 工具
+    this._subagentTool = createSubagentTool({
       executeIsolated: (prompt, opts) => {
-        if (!this._engine) throw new Error("delegate 调用失败：engine 未初始化");
+        if (!this._engine) throw new Error("subagent 调用失败：engine 未初始化");
         return this._engine.executeIsolated(prompt, opts);
       },
       resolveUtilityModel: () => this._memoryModel || this._utilityModel || null,
@@ -411,7 +411,7 @@ export class Agent {
       this._installSkillTool,
       this._notifyTool,
       this._updateSettingsTool,
-      this._delegateTool,
+      this._subagentTool,
     ].filter(Boolean);
   }
 

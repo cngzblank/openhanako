@@ -960,7 +960,7 @@
     "empty": "暂时没有活动记录，日常巡检或定时任务执行后会出现在这里",
     "back": "返回",
     "heartbeat": "日常巡检",
-    "delegate": "委派任务",
+    "subagent": "子 agent 任务",
     "cron": "定时任务",
     "patrolDone": "日常巡检完毕",
     "cronDone": "定时任务执行完毕",
@@ -1190,9 +1190,9 @@
     "settingsApplyFailed": "设置修改失败: {msg}",
     "settingsCancelled": "用户取消了「{label}」的修改",
     "settingsTimeout": "「{label}」修改确认超时，设置未变更",
-    "delegateMaxConcurrent": "当前已有 {max} 个子任务在运行，请等待完成后再发起新任务。",
-    "delegateFailed": "子任务执行失败: {msg}",
-    "delegateNoOutput": "(子任务未产生输出)",
+    "subagentMaxConcurrent": "当前已有 {max} 个子 agent 在运行，请等待完成后再发起。",
+    "subagentFailed": "子 agent 执行失败: {msg}",
+    "subagentNoOutput": "(子 agent 未产生输出)",
     "installSkillDisabled": "自学技能能力未启用。请在设置中开启「允许 Agent 自行创建/安装技能」。",
     "installSkillGithubDisabled": "GitHub 技能获取未启用。请在设置中开启「允许从 GitHub 获取技能」。",
     "installSkillInvalidGithubUrl": "无效的 GitHub URL：{url}",
@@ -1453,10 +1453,10 @@
       "filePathDesc": "(兼容) 单个文件的绝对路径",
       "labelDesc": "(兼容) 显示给用户的文件名"
     },
-    "delegate": {
-      "label": "委派子任务",
-      "description": "将独立的子任务委派给后台 agent 执行。子任务在隔离的上下文中运行，只返回最终结果，不占用当前对话的上下文。\n适用场景：\n- 需要大量搜索、阅读后总结为简短结论的调研任务\n- 可以和当前思路并行的独立子问题\n- 需要在多个方向同时探索的任务（可同时发起多个 delegate 调用）\n不适用：需要修改文件、执行命令等有副作用的操作\n\n重要：task 参数要写清楚完整的指令和必要背景，子任务看不到当前对话历史。",
-      "taskDesc": "子任务的完整指令，包含必要的背景信息",
+    "subagent": {
+      "label": "启动子 Agent",
+      "description": "启动一个子 agent 在隔离的上下文中处理独立任务。子 agent 在后台运行，拥有独立的上下文窗口，只返回最终结果，不占用当前对话的上下文。\n适用场景：\n- 需要大量搜索、阅读后总结为简短结论的调研任务\n- 可以和当前思路并行的独立子问题\n- 需要在多个方向同时探索的任务（可同时发起多个 subagent 调用）\n不适用：需要修改文件、执行命令等有副作用的操作\n\n重要：task 参数要写清楚完整的指令和必要背景，子 agent 看不到当前对话历史。",
+      "taskDesc": "子 agent 的完整指令，包含必要的背景信息",
       "modelDesc": "指定模型（可选，默认使用 utility 模型）"
     },
     "installSkill": {

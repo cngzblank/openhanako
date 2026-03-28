@@ -84,7 +84,7 @@ export function ActivityPanel() {
 
       const { activity, messages } = data;
       const typeText = activity.type === 'heartbeat' ? t('activity.heartbeat')
-        : activity.type === 'delegate' ? t('activity.delegate')
+        : activity.type === 'subagent' ? t('activity.subagent')
         : (activity.label || t('activity.cron'));
       const timeStr = activity.startedAt
         ? formatSessionDate(new Date(activity.startedAt).toISOString())
@@ -193,7 +193,7 @@ function ActivityCard({
 
   const t = window.t ?? ((p: string) => p);
   const typeText = a.type === 'heartbeat' ? t('activity.heartbeat')
-    : a.type === 'delegate' ? t('activity.delegate')
+    : a.type === 'subagent' ? t('activity.subagent')
     : (a.label || t('activity.cron'));
 
   let durationText = '';

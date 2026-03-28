@@ -946,7 +946,7 @@
     "empty": "暫時沒有活動記錄，日常巡檢或定時任務執行後會出現在這裡",
     "back": "返回",
     "heartbeat": "日常巡檢",
-    "delegate": "委派任務",
+    "subagent": "子 agent 任務",
     "cron": "定時任務",
     "patrolDone": "日常巡檢完畢",
     "cronDone": "定時任務執行完畢",
@@ -1176,9 +1176,9 @@
     "settingsApplyFailed": "設定修改失敗: {msg}",
     "settingsCancelled": "使用者取消了「{label}」的修改",
     "settingsTimeout": "「{label}」修改確認逾時，設定未變更",
-    "delegateMaxConcurrent": "目前已有 {max} 個子任務在執行，請等待完成後再發起新任務。",
-    "delegateFailed": "子任務執行失敗: {msg}",
-    "delegateNoOutput": "(子任務未產生輸出)",
+    "subagentMaxConcurrent": "目前已有 {max} 個子 agent 在執行，請等待完成後再發起。",
+    "subagentFailed": "子 agent 執行失敗: {msg}",
+    "subagentNoOutput": "(子 agent 未產生輸出)",
     "installSkillDisabled": "自學技能能力未啟用。請在設定中開啟「允許 Agent 自行建立/安裝技能」。",
     "installSkillGithubDisabled": "GitHub 技能獲取未啟用。請在設定中開啟「允許從 GitHub 獲取技能」。",
     "installSkillInvalidGithubUrl": "無效的 GitHub URL：{url}",
@@ -1438,10 +1438,10 @@
       "filePathDesc": "（相容）單一檔案的絕對路徑",
       "labelDesc": "（相容）顯示給使用者的檔案名稱"
     },
-    "delegate": {
-      "label": "委派子任務",
-      "description": "將獨立的子任務委派給背景 agent 執行。子任務在隔離的上下文中執行，只回傳最終結果，不佔用目前對話的上下文。\n適用場景：\n- 需要大量搜尋、閱讀後總結為簡短結論的調研任務\n- 可以和目前思路並行的獨立子問題\n- 需要在多個方向同時探索的任務（可同時發起多個 delegate 呼叫）\n不適用：需要修改檔案、執行命令等有副作用的操作\n\n重要：task 參數要寫清楚完整的指令和必要背景，子任務看不到目前的對話歷史。",
-      "taskDesc": "子任務的完整指令，包含必要的背景資訊",
+    "subagent": {
+      "label": "啟動子 Agent",
+      "description": "啟動一個子 agent 在隔離的上下文中處理獨立任務。子 agent 在背景執行，擁有獨立的上下文視窗，只回傳最終結果，不佔用目前對話的上下文。\n適用場景：\n- 需要大量搜尋、閱讀後總結為簡短結論的調研任務\n- 可以和目前思路並行的獨立子問題\n- 需要在多個方向同時探索的任務（可同時發起多個 subagent 呼叫）\n不適用：需要修改檔案、執行命令等有副作用的操作\n\n重要：task 參數要寫清楚完整的指令和必要背景，子 agent 看不到目前的對話歷史。",
+      "taskDesc": "子 agent 的完整指令，包含必要的背景資訊",
       "modelDesc": "指定模型（可選，預設使用 utility 模型）"
     },
     "installSkill": {

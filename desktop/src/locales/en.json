@@ -960,7 +960,7 @@
     "empty": "No activity yet. Patrol runs and scheduled tasks will appear here.",
     "back": "Back",
     "heartbeat": "Routine patrol",
-    "delegate": "Delegated task",
+    "subagent": "Sub-agent task",
     "cron": "Scheduled task",
     "patrolDone": "Patrol completed",
     "cronDone": "Scheduled task completed",
@@ -1190,9 +1190,9 @@
     "settingsApplyFailed": "Settings change failed: {msg}",
     "settingsCancelled": "User cancelled change of \"{label}\"",
     "settingsTimeout": "\"{label}\" change confirmation timed out, no changes made",
-    "delegateMaxConcurrent": "{max} sub-tasks are already running, please wait before starting new ones.",
-    "delegateFailed": "Sub-task execution failed: {msg}",
-    "delegateNoOutput": "(Sub-task produced no output)",
+    "subagentMaxConcurrent": "{max} sub-agents are already running, please wait before starting new ones.",
+    "subagentFailed": "Sub-agent execution failed: {msg}",
+    "subagentNoOutput": "(Sub-agent produced no output)",
     "installSkillDisabled": "Self-learning skills not enabled. Please enable \"Allow Agent to create/install skills\" in settings.",
     "installSkillGithubDisabled": "GitHub skill fetching not enabled. Please enable \"Allow fetching skills from GitHub\" in settings.",
     "installSkillInvalidGithubUrl": "Invalid GitHub URL: {url}",
@@ -1453,10 +1453,10 @@
       "filePathDesc": "(Compat) Single file absolute path",
       "labelDesc": "(Compat) File name shown to the user"
     },
-    "delegate": {
-      "label": "Delegate Sub-task",
-      "description": "Delegate an independent sub-task to a background agent. The sub-task runs in an isolated context and only returns the final result, without consuming the current conversation's context.\nGood for:\n- Research tasks that require extensive searching and reading, summarized into a brief conclusion\n- Independent sub-problems that can run in parallel with your current work\n- Tasks that need simultaneous exploration in multiple directions (you can fire multiple delegate calls at once)\nNot for: Operations with side effects like modifying files or executing commands\n\nImportant: The task parameter must contain complete instructions and necessary background, as the sub-task cannot see the current conversation history.",
-      "taskDesc": "Full instructions for the sub-task, including necessary background",
+    "subagent": {
+      "label": "Launch Sub-agent",
+      "description": "Launch a sub-agent to handle an independent task in an isolated context. The sub-agent runs in the background with its own context window and only returns the final result, without consuming the current conversation's context.\nGood for:\n- Research tasks that require extensive searching and reading, summarized into a brief conclusion\n- Independent sub-problems that can run in parallel with your current work\n- Tasks that need simultaneous exploration in multiple directions (you can fire multiple subagent calls at once)\nNot for: Operations with side effects like modifying files or executing commands\n\nImportant: The task parameter must contain complete instructions and necessary background, as the sub-agent cannot see the current conversation history.",
+      "taskDesc": "Full instructions for the sub-agent, including necessary background",
       "modelDesc": "Specify model (optional, defaults to utility model)"
     },
     "installSkill": {
