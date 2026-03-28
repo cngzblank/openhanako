@@ -18,6 +18,11 @@ import { ChannelRouter } from "./channel-router.js";
 import { GuestHandler } from "./guest-handler.js";
 import { Scheduler } from "./scheduler.js";
 import { DmRouter } from "./dm-router.js";
+import {
+  extractTextContent,
+  loadSessionHistoryMessages,
+  isValidSessionPath,
+} from "../core/message-utils.js";
 
 export class Hub {
   /**
@@ -38,6 +43,8 @@ export class Hub {
     // 注入 EventBus（替代旧的 proxy hack）
     engine.setEventBus(this._eventBus);
 
+    this._sessionHandlerCleanups = [];
+    this._setupSessionHandlers();
     this._setupNotifyHandler();
     this._setupDmHandler();
   }
@@ -204,6 +211,8 @@ export class Hub {
   // ──────────── 生命周期 ────────────
 
   async dispose() {
+    for (const cleanup of this._sessionHandlerCleanups) cleanup();
+    this._sessionHandlerCleanups = [];
     await this.stopSchedulers();
     await this._engine.dispose();
     this._eventBus.clear();
@@ -213,6 +222,95 @@ export class Hub {
 
   /** @returns {DmRouter} */
   get dmRouter() { return this._dmRouter; }
+
+  _setupSessionHandlers() {
+    const bus = this._eventBus;
+    const engine = this._engine;
+
+    // ── session:send ──
+    this._sessionHandlerCleanups.push(bus.handle("session:send", async ({ text, sessionPath, ...opts }) => {
+      if (!text || typeof text !== "string" || !text.trim()) {
+        throw new Error("text is required");
+      }
+      const sp = sessionPath || engine.currentSessionPath;
+      if (!sp) throw new Error("no active session");
+      if (engine.isSessionStreaming(sp)) throw new Error("session_busy");
+      engine.promptSession(sp, text, opts).catch(err => {
+        console.error("[Hub] session:send promptSession error:", err.message);
+        bus.emit({ type: "error", error: err.message, source: "session:send" }, sp);
+      });
+      return { sessionPath: sp, accepted: true };
+    }));
+
+    // ── session:abort ──
+    this._sessionHandlerCleanups.push(bus.handle("session:abort", async ({ sessionPath } = {}) => {
+      const sp = sessionPath || engine.currentSessionPath;
+      if (!sp) return { aborted: false };
+      const result = await engine.abortSession(sp);
+      return { aborted: !!result };
+    }));
+
+    // ── session:history ──
+    this._sessionHandlerCleanups.push(bus.handle("session:history", async ({ sessionPath, limit: rawLimit } = {}) => {
+      if (!sessionPath) throw new Error("sessionPath is required");
+      if (!isValidSessionPath(sessionPath, engine.agentsDir)) {
+        throw new Error("Invalid session path");
+      }
+      const limit = Math.min(Number(rawLimit) || 50, 200);
+      const sourceMessages = await loadSessionHistoryMessages(engine, sessionPath);
+      const messages = [];
+      for (const m of sourceMessages) {
+        if (m.role === "user") {
+          const { text, images } = extractTextContent(m.content);
+          if (text || images.length) {
+            messages.push({ role: "user", content: text, images: images.length ? images : undefined });
+          }
+        } else if (m.role === "assistant") {
+          const { text, thinking, toolUses } = extractTextContent(m.content, { stripThink: true });
+          if (text || toolUses.length) {
+            messages.push({
+              role: "assistant",
+              content: text,
+              thinking: thinking || undefined,
+              toolCalls: toolUses.length ? toolUses : undefined,
+            });
+          }
+        }
+        if (messages.length >= limit) break;
+      }
+      return { messages };
+    }));
+
+    // ── session:list ──
+    this._sessionHandlerCleanups.push(bus.handle("session:list", async ({ agentId } = {}) => {
+      const all = await engine.listSessions();
+      const filtered = agentId ? all.filter(s => s.agentId === agentId) : all;
+      const sessions = filtered.map(s => ({
+        path: s.path,
+        title: s.title,
+        firstMessage: s.firstMessage,
+        agentId: s.agentId,
+        agentName: s.agentName,
+        modelId: s.modelId,
+        messageCount: s.messageCount,
+        cwd: s.cwd,
+        modified: s.modified,
+      }));
+      return { sessions };
+    }));
+
+    // ── agent:list ──
+    this._sessionHandlerCleanups.push(bus.handle("agent:list", async () => {
+      const all = engine.listAgents();
+      const agents = all.map(a => ({
+        id: a.id,
+        name: a.name,
+        isCurrent: a.isCurrent,
+        isPrimary: a.isPrimary,
+      }));
+      return { agents };
+    }));
+  }
 
   _setupDmHandler() {
     const engine = this._engine;
