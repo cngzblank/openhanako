@@ -7,12 +7,14 @@
 
 import { memo, useRef, useEffect, useState, useCallback } from 'react';
 import { useStore } from '../../stores';
+import { loadMoreMessages } from '../../stores/session-actions';
 import { UserMessage } from './UserMessage';
 import { AssistantMessage } from './AssistantMessage';
 import type { ChatListItem } from '../../stores/chat-types';
 import styles from './Chat.module.css';
 
 const MAX_ALIVE = 5;
+const LOAD_MORE_THRESHOLD = 200; // 距顶部多少 px 触发加载
 
 // ── 入口 ──
 
@@ -68,6 +70,8 @@ const SCROLL_THRESHOLD = 300;
 
 const Panel = memo(function Panel({ path, active }: { path: string; active: boolean }) {
   const items = useStore(s => s.chatSessions[path]?.items || []);
+  const hasMore = useStore(s => s.chatSessions[path]?.hasMore ?? false);
+  const loadingMore = useStore(s => s.chatSessions[path]?.loadingMore ?? false);
   const isSessionStreaming = useStore(s => s.streamingSessions.includes(path));
   const ref = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -86,14 +90,46 @@ const Panel = memo(function Panel({ path, active }: { path: string; active: bool
     if (el) el.scrollTop = el.scrollHeight;
   };
 
-  // scroll 事件维护 isAtBottom 标志
+  // scroll 事件维护 isAtBottom 标志 + 上滑加载更多
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const onScroll = () => checkAtBottom();
+    const onScroll = () => {
+      checkAtBottom();
+      // 触顶加载更多
+      if (el.scrollTop < LOAD_MORE_THRESHOLD) {
+        const session = useStore.getState().chatSessions[path];
+        if (session?.hasMore && !session.loadingMore) {
+          loadMoreMessages(path);
+        }
+      }
+    };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [path]);
+
+  // prepend 后保持滚动位置：监听 items 变化，如果头部变了就修正 scrollTop
+  const prevFirstId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const firstId = items[0]?.type === 'message' ? items[0].data.id : undefined;
+    const el = ref.current;
+    if (el && prevFirstId.current && firstId !== prevFirstId.current) {
+      // 头部 id 变了 → prepend 发生，修正 scrollTop 让原来的内容不跳
+      const prevHeight = el.dataset.prevScrollHeight;
+      if (prevHeight) {
+        el.scrollTop += el.scrollHeight - Number(prevHeight);
+      }
+    }
+    prevFirstId.current = firstId;
+  }, [items]);
+
+  // 在 loadingMore 变成 true 前快照 scrollHeight
+  useEffect(() => {
+    const el = ref.current;
+    if (el && loadingMore) {
+      el.dataset.prevScrollHeight = String(el.scrollHeight);
+    }
+  }, [loadingMore]);
 
   // ResizeObserver：内容高度变化 + 在底部 → 自动滚
   useEffect(() => {
@@ -142,6 +178,11 @@ const Panel = memo(function Panel({ path, active }: { path: string; active: bool
       }}
     >
       <div ref={contentRef} className={styles.sessionMessages}>
+        {hasMore && (
+          <div className={styles.loadMoreHint}>
+            {loadingMore ? '...' : ''}
+          </div>
+        )}
         {items.map((item, i) => (
           <ItemView
             key={item.type === 'message' ? item.data.id : `c-${i}`}

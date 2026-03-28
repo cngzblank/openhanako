@@ -43,6 +43,32 @@ export async function loadMessages(forPath?: string): Promise<void> {
   } catch (err) { console.error('[loadMessages] error:', err); }
 }
 
+/** 上滑加载更早的消息（分页） */
+export async function loadMoreMessages(forPath?: string): Promise<void> {
+  const targetPath = forPath || useStore.getState().currentSessionPath;
+  if (!targetPath) return;
+  const session = useStore.getState().chatSessions[targetPath];
+  if (!session || !session.hasMore || session.loadingMore) return;
+
+  useStore.getState().setLoadingMore(targetPath, true);
+  try {
+    const before = session.oldestId ?? '';
+    const res = await hanaFetch(
+      `/api/sessions/messages?path=${encodeURIComponent(targetPath)}&before=${encodeURIComponent(before)}`,
+    );
+    const data = await res.json();
+    const items = buildItemsFromHistory(data);
+    if (items.length > 0) {
+      useStore.getState().prependItems(targetPath, items, data.hasMore ?? false);
+    } else {
+      useStore.getState().setLoadingMore(targetPath, false);
+    }
+  } catch (err) {
+    console.error('[loadMoreMessages] error:', err);
+    useStore.getState().setLoadingMore(targetPath, false);
+  }
+}
+
 // ══════════════════════════════════════════════════════
 // Session 列表
 // ══════════════════════════════════════════════════════
@@ -132,9 +158,6 @@ export async function switchSession(path: string): Promise<void> {
       browserThumbnail: data.browserRunning ? state.browserThumbnail : null,
     });
 
-    // 刷新模型列表（当前 session 的模型可能不同）
-    loadModels();
-
     // 恢复目标 session 的 tab 状态 + 清除 quotedSelection
     restoreTabState(path);
     useStore.getState().clearQuotedSelection();
@@ -142,9 +165,8 @@ export async function switchSession(path: string): Promise<void> {
     // Sync plan mode for the switched-to session
     window.dispatchEvent(new CustomEvent('hana-plan-mode', { detail: { enabled: data.planMode ?? false } }));
 
-    // renderBrowserCard — no-op (browser card rendering handled by React)
-
-    // updateFolderButton — no-op (React-driven)
+    // 刷新模型列表（当前 session 的模型可能不同）
+    loadModels();
 
     // 如果 store 中没有该 session 的消息数据，加载之
     const hasData = !!useStore.getState().chatSessions?.[path];
@@ -157,11 +179,12 @@ export async function switchSession(path: string): Promise<void> {
 
     // 切换会话后刷新 context ring
     useStore.setState({ contextTokens: null, contextWindow: null, contextPercent: null });
-    const { getWebSocket } = await import('../services/websocket');
-    const wsConn = getWebSocket();
-    if (wsConn?.readyState === WebSocket.OPEN) {
-      wsConn.send(JSON.stringify({ type: 'context_usage' }));
-    }
+    import('../services/websocket').then(({ getWebSocket }) => {
+      const wsConn = getWebSocket();
+      if (wsConn?.readyState === WebSocket.OPEN) {
+        wsConn.send(JSON.stringify({ type: 'context_usage' }));
+      }
+    });
   } catch (err) {
     console.error('[session] switch failed:', err);
   }

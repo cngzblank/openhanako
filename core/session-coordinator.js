@@ -64,6 +64,7 @@ export class SessionCoordinator {
     this._sessions = new Map();
     this._headlessRefCount = 0;
     this._titlesCache = new Map(); // sessionDir → { titles, ts }
+    this._metaCache = new Map();   // metaPath → { data, ts }
     this._pendingPlanMode = false;
   }
 
@@ -207,7 +208,7 @@ export class SessionCoordinator {
     let savedModelRef = null;  // {id, provider} or null
     try {
       const metaPath = path.join(this._d.getAgent().sessionDir, "session-meta.json");
-      const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+      const meta = await this._readMetaCached(metaPath);
       const sessKey = path.basename(sessionPath);
       const metaEntry = meta[sessKey];
       if (metaEntry?.memoryEnabled === false) memoryEnabled = false;
@@ -452,20 +453,18 @@ export class SessionCoordinator {
   }
 
   async listSessions() {
-    const allSessions = [];
     const agents = this._d.listAgents();
 
-    for (const agent of agents) {
+    // 并行处理每个 agent，避免串行同步 I/O 阻塞事件循环
+    const perAgent = await Promise.all(agents.map(async (agent) => {
       const sessionDir = path.join(this._d.agentsDir, agent.id, "sessions");
-      if (!fs.existsSync(sessionDir)) continue;
+      try { await fsp.access(sessionDir); } catch { return []; }
       try {
-        const sessions = await SessionManager.list(process.cwd(), sessionDir);
-        const titles = await this._loadSessionTitlesFor(sessionDir);
-        // 读取 session-meta.json 获取 modelId
-        let meta = {};
-        try {
-          meta = JSON.parse(fs.readFileSync(path.join(sessionDir, "..", "session-meta.json"), "utf-8"));
-        } catch {}
+        const [sessions, titles, meta] = await Promise.all([
+          SessionManager.list(process.cwd(), sessionDir),
+          this._loadSessionTitlesFor(sessionDir),
+          this._readMetaCached(path.join(sessionDir, "..", "session-meta.json")),
+        ]);
         for (const s of sessions) {
           if (titles[s.path]) s.title = titles[s.path];
           s.agentId = agent.id;
@@ -478,10 +477,11 @@ export class SessionCoordinator {
           } else {
             s.modelId = metaEntry?.modelId || null;
           }
-          allSessions.push(s);
         }
-      } catch {}
-    }
+        return sessions;
+      } catch { return []; }
+    }));
+    const allSessions = perAgent.flat();
 
     const currentPath = this.currentSessionPath;
     const activeAgentId = this._d.getActiveAgentId();
@@ -531,6 +531,27 @@ export class SessionCoordinator {
       this._titlesCache.set(sessionDir, { titles: {}, ts: Date.now() });
       return {};
     }
+  }
+
+  /** 异步读取 session-meta.json，带 TTL 缓存 */
+  async _readMetaCached(metaPath) {
+    const cached = this._metaCache.get(metaPath);
+    if (cached && Date.now() - cached.ts < SessionCoordinator._TITLES_TTL) {
+      return cached.data;
+    }
+    try {
+      const raw = await fsp.readFile(metaPath, "utf-8");
+      const data = JSON.parse(raw);
+      this._metaCache.set(metaPath, { data, ts: Date.now() });
+      return data;
+    } catch {
+      return {};
+    }
+  }
+
+  /** session-meta 写入后清除对应缓存 */
+  invalidateMetaCache(metaPath) {
+    this._metaCache.delete(metaPath);
   }
 
   // ── Session Context ──

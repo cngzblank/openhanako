@@ -88,14 +88,22 @@ export function createSessionsRoute(engine) {
         }
       }
 
-      // 分页：只在有 before 参数时切片，否则返回全量
+      // 分页：before 参数指定游标，否则默认返回最后 limit 条
       let messages;
       let hasMore = false;
       let slicedFileOutputs = fileOutputs;
       let slicedArtifacts = artifacts;
 
-      if (beforeId != null && beforeId > 0) {
-        const endIdx = Math.min(beforeId, allMessages.length);
+      const total = allMessages.length;
+      // all=1 强制全量返回（流式恢复等特殊场景）
+      const forceAll = c.req.query("all") === "1";
+
+      if (forceAll) {
+        messages = allMessages;
+      } else {
+        const endIdx = (beforeId != null && beforeId > 0)
+          ? Math.min(beforeId, total)
+          : total;
         const startIdx = Math.max(0, endIdx - limit);
         messages = allMessages.slice(startIdx, endIdx);
         hasMore = startIdx > 0;
@@ -106,9 +114,6 @@ export function createSessionsRoute(engine) {
         slicedArtifacts = artifacts
           .filter(a => a.afterIndex >= startIdx && a.afterIndex < endIdx)
           .map(a => ({ ...a, afterIndex: a.afterIndex - startIdx }));
-      } else {
-        // 默认返回全量，不截断
-        messages = allMessages;
       }
 
       // 从历史中提取最新 todo 状态

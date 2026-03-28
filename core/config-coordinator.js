@@ -263,6 +263,7 @@ export class ConfigCoordinator {
           ...(modelRef && { model: modelRef }),
         };
         fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+        sessionCoord?.invalidateMetaCache?.(metaPath);
         return;
       } catch (err) {
         if (attempt === 0) {
