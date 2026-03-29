@@ -141,8 +141,10 @@ export class BridgeSessionManager {
       }
 
       let sessionOpts;
+      // present_files 产出的文件路径收集器（owner 模式下填充）
+      let presentedFiles = [];
       // MEDIA 协议指令（追加到 bridge 场景的系统提示）
-      const mediaInstruction = "当你需要发送媒体文件（图片、视频、音频、文件）时，在回复中单独一行写 MEDIA:<url>，例如：\nMEDIA:https://example.com/photo.jpg\n不要把 MEDIA: 写在代码块里。一行一个。";
+      const mediaInstruction = "当你需要发送媒体文件（图片、视频、音频、文件）时，在回复中单独一行写 MEDIA:<url或路径>，例如：\nMEDIA:https://example.com/photo.jpg\nMEDIA:/Users/someone/Desktop/report.pdf\n支持 HTTP URL 和本地绝对路径。不要把 MEDIA: 写在代码块里。一行一个。";
 
       if (opts.guest) {
         // guest 模式：yuan + public-ishiki + contextTag，主模型，无工具
@@ -199,6 +201,24 @@ export class BridgeSessionManager {
           throw new Error(t("error.bridgeAgentModelNotAvailable", { name: agent.agentName, model: ownerModelId }));
         }
 
+        // 包装 present_files：执行时收集文件路径，session 结束后追加为 MEDIA: 行
+        const wrappedCustomTools = (bridgeCustomTools || []).map(tool => {
+          if (tool.name !== "present_files") return tool;
+          const origExecute = tool.execute;
+          return {
+            ...tool,
+            execute: async (toolCallId, params) => {
+              const result = await origExecute(toolCallId, params);
+              if (result?.details?.files) {
+                for (const f of result.details.files) {
+                  if (f.filePath) presentedFiles.push(f.filePath);
+                }
+              }
+              return result;
+            },
+          };
+        });
+
         // 包装 resourceLoader 追加 MEDIA 协议指令
         const baseRL = this._deps.getResourceLoader();
         const ownerRL = Object.create(baseRL);
@@ -213,7 +233,7 @@ export class BridgeSessionManager {
           thinkingLevel: mm.resolveThinkingLevel(prefs?.thinking_level || "auto"),
           resourceLoader: ownerRL,
           tools: bridgeTools,
-          customTools: bridgeCustomTools,
+          customTools: wrappedCustomTools,
           settingsManager: this._createSettings(ownerModel),
         };
       }
@@ -267,6 +287,13 @@ export class BridgeSessionManager {
           index[sessionKey] = entry;
         }
         this.writeIndex(index, agent);
+      }
+
+      // present_files 产出的文件追加为 MEDIA: 行，汇入统一媒体管线
+      if (presentedFiles?.length) {
+        const mediaSuffix = presentedFiles.map(f => `MEDIA:${f}`).join("\n");
+        capturedText = capturedText.trimEnd() + "\n" + mediaSuffix;
+        debugLog()?.log("bridge-session", `present_files → ${presentedFiles.length} file(s) injected as MEDIA:`);
       }
 
       return capturedText.trim() || null;
