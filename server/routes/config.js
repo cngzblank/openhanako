@@ -303,8 +303,7 @@ export function createConfigRoute(engine) {
    * 返回 { store, isTemp }，调用方用完 isTemp===true 的 store 需要 close。
    */
   function getStoreForAgent(agentId) {
-    const activeId = path.basename(engine.agent.agentDir);
-    if (!agentId || agentId === activeId) {
+    if (!agentId || agentId === engine.currentAgentId) {
       return { store: engine.factStore, isTemp: false };
     }
     if (/[\/\\.]/.test(agentId)) {
@@ -337,8 +336,8 @@ export function createConfigRoute(engine) {
   route.get("/memories/compiled", async (c) => {
     try {
       const agentId = c.req.query("agentId");
-      const activeId = path.basename(engine.agent.agentDir);
-      const mdPath = (!agentId || agentId === activeId)
+      const agent = resolveAgent(engine, c);
+      const mdPath = (!agentId || agentId === engine.currentAgentId)
         ? engine.memoryMdPath
         : path.join(engine.agentsDir, agentId, "memory", "memory.md");
       const content = await fs.readFile(mdPath, "utf-8").catch(() => "");
@@ -352,8 +351,8 @@ export function createConfigRoute(engine) {
   route.delete("/memories/compiled", async (c) => {
     try {
       const agentId = c.req.query("agentId");
-      const activeId = path.basename(engine.agent.agentDir);
-      const memDir = (!agentId || agentId === activeId)
+      const isCurrent = !agentId || agentId === engine.currentAgentId;
+      const memDir = isCurrent
         ? path.dirname(engine.memoryMdPath)
         : path.join(engine.agentsDir, agentId, "memory");
       const targets = ["memory.md", "today.md", "week.md", "longterm.md", "facts.md"];
@@ -362,8 +361,8 @@ export function createConfigRoute(engine) {
         await fs.writeFile(p, "", "utf-8").catch(() => {});
         await fs.unlink(p + ".fingerprint").catch(() => {});
       }
-      debugLog()?.log("api", `DELETE /api/memories/compiled agent=${agentId || activeId}`);
-      if (!agentId || agentId === activeId) await engine.updateConfig({});
+      debugLog()?.log("api", `DELETE /api/memories/compiled agent=${agentId || engine.currentAgentId}`);
+      if (isCurrent) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
       return c.json({ error: err.message }, 500);
@@ -378,12 +377,12 @@ export function createConfigRoute(engine) {
       const { store, isTemp } = getStoreForAgent(agentId);
       if (isTemp) tempStore = store;
       store.clearAll();
-      const activeId = path.basename(engine.agent.agentDir);
-      const mdPath = (!agentId || agentId === activeId)
+      const isCurrent = !agentId || agentId === engine.currentAgentId;
+      const mdPath = isCurrent
         ? engine.memoryMdPath
         : path.join(engine.agentsDir, agentId, "memory", "memory.md");
       await fs.writeFile(mdPath, "", "utf-8");
-      debugLog()?.log("api", `DELETE /api/memories agent=${agentId || activeId}`);
+      debugLog()?.log("api", `DELETE /api/memories agent=${agentId || engine.currentAgentId}`);
       if (!isTemp) await engine.updateConfig({});
       return c.json({ ok: true });
     } catch (err) {
