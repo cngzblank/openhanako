@@ -3,6 +3,8 @@ export interface ContextSlice {
   contextTokens: number | null;
   contextWindow: number | null;
   contextPercent: number | null;
+  /** 按 session path 存储的 context usage（权威源） */
+  contextBySession: Record<string, { tokens: number | null; window: number | null; percent: number | null }>;
   /** Session paths currently undergoing compaction */
   compactingSessions: string[];
   addCompactingSession: (path: string) => void;
@@ -15,6 +17,7 @@ export const createContextSlice = (
   contextTokens: null,
   contextWindow: null,
   contextPercent: null,
+  contextBySession: {},
   compactingSessions: [],
   addCompactingSession: (path) => set((s) => ({
     compactingSessions: s.compactingSessions.includes(path)

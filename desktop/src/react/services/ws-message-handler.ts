@@ -122,7 +122,25 @@ export function handleServerMessage(msg: any): void {
     if (msg.type === 'compaction_end') {
       const sp = msg.sessionPath;
       if (sp) useStore.getState().removeCompactingSession(sp);
-      // 只有当前 session 的 compaction 才更新 context token 显示
+      // 写入 keyed store
+      if (sp) {
+        if (msg.tokens != null && msg.contextWindow != null) {
+          useStore.setState(s => ({
+            contextBySession: {
+              ...s.contextBySession,
+              [sp]: { tokens: msg.tokens ?? null, window: msg.contextWindow ?? null, percent: msg.percent ?? null },
+            },
+          }));
+        } else {
+          useStore.setState(s => ({
+            contextBySession: {
+              ...s.contextBySession,
+              [sp]: { tokens: null, window: s.contextBySession[sp]?.window ?? null, percent: null },
+            },
+          }));
+        }
+      }
+      // Compat: 只有当前 session 的 compaction 才更新全局 context token 显示
       if (sp === useStore.getState().currentSessionPath) {
         if (msg.tokens != null && msg.contextWindow != null) {
           useStore.setState({
@@ -238,8 +256,18 @@ export function handleServerMessage(msg: any): void {
       break;
     }
 
-    case 'context_usage':
-      if (msg.tokens != null && msg.contextWindow != null) {
+    case 'context_usage': {
+      const sp = msg.sessionPath || state.currentSessionPath;
+      if (sp && msg.tokens != null && msg.contextWindow != null) {
+        useStore.setState(s => ({
+          contextBySession: {
+            ...s.contextBySession,
+            [sp]: { tokens: msg.tokens ?? null, window: msg.contextWindow ?? null, percent: msg.percent ?? null },
+          },
+        }));
+      }
+      // Compat: update globals only if current session
+      if ((!msg.sessionPath || msg.sessionPath === state.currentSessionPath) && msg.tokens != null && msg.contextWindow != null) {
         useStore.setState({
           contextTokens: msg.tokens,
           contextWindow: msg.contextWindow,
@@ -247,9 +275,17 @@ export function handleServerMessage(msg: any): void {
         });
       }
       break;
+    }
 
     case 'error': {
-      useStore.getState().setInlineError(msg.message);
+      const sp = msg.sessionPath || useStore.getState().currentSessionPath;
+      if (sp) {
+        useStore.setState(s => ({ inlineErrors: { ...s.inlineErrors, [sp]: msg.message } }));
+      }
+      // Compat: only update global if current session
+      if (!msg.sessionPath || msg.sessionPath === useStore.getState().currentSessionPath) {
+        useStore.getState().setInlineError(msg.message);
+      }
       break;
     }
 
@@ -288,6 +324,7 @@ export function handleServerMessage(msg: any): void {
         if (msg.isStreaming) {
           if (!list.includes(sp)) useStore.setState({ streamingSessions: [...list, sp] });
           // 新一轮 streaming 开始时清除上次的 inline error
+          useStore.setState(s => ({ inlineErrors: { ...s.inlineErrors, [sp]: null } }));
           if (sp === state.currentSessionPath) useStore.setState({ inlineError: null });
         } else {
           useStore.setState({ streamingSessions: list.filter((p: string) => p !== sp) });

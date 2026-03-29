@@ -6,6 +6,8 @@ export interface StreamingSlice {
   /** 内联错误提示（输入框上方显示，替代 toast） */
   inlineError: string | null;
   setInlineError: (msg: string | null) => void;
+  /** 按 session path 存储的内联错误（权威源） */
+  inlineErrors: Record<string, string | null>;
 }
 
 export const createStreamingSlice = (
@@ -22,4 +24,5 @@ export const createStreamingSlice = (
   })),
   inlineError: null,
   setInlineError: (msg) => set({ inlineError: msg }),
+  inlineErrors: {},
 });
