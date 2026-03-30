@@ -35,6 +35,10 @@ interface DetailState {
   messages: DetailMessage[];
 }
 
+const FLEX_COLUMN_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 };
+const CURSOR_POINTER_STYLE: React.CSSProperties = { cursor: 'pointer' };
+const DANGER_COLOR_STYLE: React.CSSProperties = { color: 'var(--danger)' };
+
 export function ActivityPanel() {
   const activePanel = useStore(s => s.activePanel);
   const activities = useStore(s => s.activities) as ActivityItem[];
@@ -111,7 +115,7 @@ export function ActivityPanel() {
       <div className={fp.floatingPanelInner}>
         {detail ? (
           // 详情视图
-          <div id="activityDetailView" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div id="activityDetailView" style={FLEX_COLUMN_STYLE}>
             <div className={fp.floatingPanelHeader}>
               <button className={fp.floatingPanelBack} onClick={closeDetail}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -130,7 +134,7 @@ export function ActivityPanel() {
           </div>
         ) : (
           // 列表视图
-          <div id="activityListView" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div id="activityListView" style={FLEX_COLUMN_STYLE}>
             <div className={fp.floatingPanelHeader}>
               <h2 className={fp.floatingPanelTitle}>{t('activity.title')}</h2>
               <div className={fp.activityHbToggle}>
@@ -208,7 +212,7 @@ function ActivityCard({
   return (
     <div
       className={`${fp.actCard}${a.status === 'error' ? ` ${fp.actCardError}` : ''}`}
-      style={a.sessionFile ? { cursor: 'pointer' } : undefined}
+      style={a.sessionFile ? CURSOR_POINTER_STYLE : undefined}
       onClick={a.sessionFile ? () => onOpen(a.id) : undefined}
     >
       <div className={fp.actCardHead}>
@@ -229,7 +233,7 @@ function ActivityCard({
       </div>
       <div className={fp.actCardMeta}>
         {durationText && <span className={fp.actCardDuration}>{durationText}</span>}
-        {a.status === 'error' && <span style={{ color: 'var(--danger)' }}>{t('activity.error')}</span>}
+        {a.status === 'error' && <span style={DANGER_COLOR_STYLE}>{t('activity.error')}</span>}
         {a.sessionFile && <span className={fp.actCardViewHint}>{t('activity.viewSession')}</span>}
       </div>
     </div>
