@@ -4,6 +4,7 @@
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  padding-top: 52px; /* titlebar height */
 }
 .iframe {
   flex: 1;
