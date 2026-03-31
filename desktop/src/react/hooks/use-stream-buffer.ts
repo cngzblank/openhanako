@@ -28,6 +28,9 @@ interface Buffer {
   inThinking: boolean;
   inMood: boolean;
   inXing: boolean;
+  inCard: boolean;
+  cardAttrs: { type: string; plugin: string; route: string; title?: string } | null;
+  cardDescAcc: string;
   lastFlushTime: number;
   flushTimer: ReturnType<typeof setTimeout> | null;
   /** 当前 turn 是否已追加了空 assistant message */
@@ -46,6 +49,9 @@ function createBuffer(sessionPath: string): Buffer {
     inThinking: false,
     inMood: false,
     inXing: false,
+    inCard: false,
+    cardAttrs: null,
+    cardDescAcc: '',
     lastFlushTime: 0,
     flushTimer: null,
     messageAppended: false,
@@ -227,6 +233,38 @@ class StreamBufferManager {
         this.flush(buf);
         break;
 
+      case 'card_start':
+        this.ensureMessage(buf);
+        buf.inCard = true;
+        buf.cardAttrs = msg.attrs || null;
+        buf.cardDescAcc = '';
+        break;
+
+      case 'card_text':
+        buf.cardDescAcc += msg.delta || '';
+        break;
+
+      case 'card_end': {
+        buf.inCard = false;
+        if (buf.cardAttrs) {
+          this.flush(buf); // flush pending text first
+          const card = {
+            type: buf.cardAttrs.type || 'iframe',
+            pluginId: buf.cardAttrs.plugin || '',
+            route: buf.cardAttrs.route || '',
+            title: buf.cardAttrs.title,
+            description: buf.cardDescAcc,
+          };
+          useStore.getState().updateLastMessage(sessionPath, (m) => ({
+            ...m,
+            blocks: [...(m.blocks || []), { type: 'plugin_card' as const, card }],
+          }));
+        }
+        buf.cardAttrs = null;
+        buf.cardDescAcc = '';
+        break;
+      }
+
       case 'tool_start':
         this.ensureMessage(buf);
         // 工具事件频率低，直接写 store
@@ -270,10 +308,6 @@ class StreamBufferManager {
               tools[toolIdx] = { ...tools[toolIdx], done: true, success: !!msg.success, details: msg.details };
               const allDone = tools.every(t => t.done);
               blocks[i] = { ...tg, tools, collapsed: allDone && tools.length > 1 };
-              // Plugin Card: append as independent block after tool_group
-              if (msg.details?.card) {
-                blocks.push({ type: 'plugin_card' as any, card: msg.details.card });
-              }
               return { ...m, blocks };
             }
           }
@@ -371,6 +405,9 @@ class StreamBufferManager {
         buf.inThinking = false;
         buf.inMood = false;
         buf.inXing = false;
+        buf.inCard = false;
+        buf.cardAttrs = null;
+        buf.cardDescAcc = '';
         buf.messageAppended = false;
         break;
     }
