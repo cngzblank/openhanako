@@ -354,3 +354,132 @@ export class XingParser {
     }
   }
 }
+
+/**
+ * CardParser — 从 streaming text 中解析 <card ...>...</card> 标签
+ *
+ * 链在 XingParser 的 text 输出之后，输出事件流：
+ *   card_start { attrs: { type?, plugin, route, title? } }
+ *   card_text { data }
+ *   card_end
+ *   text { data } — 非 card 内容透传
+ */
+const CARD_ATTR_RE = /(\w+)="([^"]*)"/g;
+
+export class CardParser {
+  constructor() {
+    this.inCard = false;
+    this.buffer = "";
+    this._attrs = null;
+  }
+
+  feed(delta, emit) {
+    this.buffer += delta;
+    this._drain(emit);
+  }
+
+  flush(emit) {
+    if (this.buffer) {
+      if (this.inCard) {
+        emit({ type: "card_text", data: this.buffer });
+      } else {
+        emit({ type: "text", data: this.buffer });
+      }
+      this.buffer = "";
+    }
+    if (this.inCard) {
+      emit({ type: "card_end" });
+      this.inCard = false;
+      this._attrs = null;
+    }
+  }
+
+  reset() {
+    this.inCard = false;
+    this.buffer = "";
+    this._attrs = null;
+  }
+
+  _parseAttrs(tag) {
+    const attrs = {};
+    let m;
+    CARD_ATTR_RE.lastIndex = 0;
+    while ((m = CARD_ATTR_RE.exec(tag)) !== null) {
+      attrs[m[1]] = m[2];
+    }
+    return attrs;
+  }
+
+  _findCardOpen() {
+    // Find <card followed by space or > (word boundary — excludes <cardiac etc.)
+    let searchFrom = 0;
+    while (searchFrom < this.buffer.length) {
+      const idx = this.buffer.indexOf("<card", searchFrom);
+      if (idx === -1) return -1;
+      const after = this.buffer[idx + 5];
+      if (after === undefined || after === " " || after === ">" || after === "\n" || after === "\t") return idx;
+      searchFrom = idx + 1;
+    }
+    return -1;
+  }
+
+  _drain(emit) {
+    while (this.buffer.length > 0) {
+      if (!this.inCard) {
+        // Look for complete opening tag <card ... > (with word boundary)
+        const openIdx = this._findCardOpen();
+        if (openIdx !== -1) {
+          // Check if the full opening tag is present (find closing >)
+          const closeAngle = this.buffer.indexOf(">", openIdx);
+          if (closeAngle !== -1) {
+            const before = this.buffer.slice(0, openIdx);
+            if (before) emit({ type: "text", data: before });
+            const openTag = this.buffer.slice(openIdx, closeAngle + 1);
+            this._attrs = this._parseAttrs(openTag);
+            emit({ type: "card_start", attrs: this._attrs });
+            this.inCard = true;
+            this.buffer = this.buffer.slice(closeAngle + 1);
+            continue;
+          }
+          // Have <card but no > yet — hold from <card onward
+          const before = this.buffer.slice(0, openIdx);
+          if (before) emit({ type: "text", data: before });
+          this.buffer = this.buffer.slice(openIdx);
+          break;
+        }
+        // Check trailing prefix for partial <card
+        const holdLen = trailingPrefixLen(this.buffer, "<card");
+        if (holdLen > 0) {
+          const safe = this.buffer.slice(0, -holdLen);
+          if (safe) emit({ type: "text", data: safe });
+          this.buffer = this.buffer.slice(-holdLen);
+          break;
+        }
+        emit({ type: "text", data: this.buffer });
+        this.buffer = "";
+      } else {
+        // Inside card — look for </card>
+        const closeTag = "</card>";
+        const idx = this.buffer.indexOf(closeTag);
+        if (idx !== -1) {
+          const content = this.buffer.slice(0, idx);
+          if (content) emit({ type: "card_text", data: content });
+          emit({ type: "card_end" });
+          this.inCard = false;
+          this._attrs = null;
+          this.buffer = this.buffer.slice(idx + closeTag.length);
+          continue;
+        }
+        const holdLen = trailingPrefixLen(this.buffer, closeTag);
+        if (holdLen > 0) {
+          const safe = this.buffer.slice(0, -holdLen);
+          if (safe) emit({ type: "card_text", data: safe });
+          this.buffer = this.buffer.slice(-holdLen);
+          break;
+        }
+        emit({ type: "card_text", data: this.buffer });
+        this.buffer = "";
+      }
+    }
+  }
+}
