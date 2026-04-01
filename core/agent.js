@@ -717,10 +717,12 @@ export class Agent {
     parts.push(isZh
       ? `\n## 书桌\n\n` +
         `用户所说的「书桌」「工作空间」指的是你当前的工作目录（cwd），不是系统桌面（~/Desktop）。` +
-        (cwdPath ? `\n当前工作目录：${cwdPath}` : "")
+        (cwdPath ? `\n当前工作目录：${cwdPath}` : "") +
+        `\n用户提到的文件、目录默认在当前工作目录下查找。找不到时再尝试主目录及其他常见位置。`
       : `\n## Desk\n\n` +
         `When the user says "desk" (书桌) or "workspace", they mean your current working directory (cwd), NOT the system Desktop (~/Desktop).` +
-        (cwdPath ? `\nCurrent working directory: ${cwdPath}` : "")
+        (cwdPath ? `\nCurrent working directory: ${cwdPath}` : "") +
+        `\nFiles and directories mentioned by the user should be searched in the current working directory first. Only look in the home directory or other common locations if not found.`
     );
 
     // 日期时间
