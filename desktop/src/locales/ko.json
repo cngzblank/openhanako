@@ -1470,7 +1470,8 @@
       "githubUrlDesc": "GitHub 저장소 URL (모드 A)",
       "skillContentDesc": "SKILL.md의 전체 내용 (모드 B)",
       "skillNameDesc": "스킬 이름 (모드 B에 필수)",
-      "reasonDesc": "이 스킬이 필요한 이유 설명 (감사용, 필수)"
+      "reasonDesc": "이 스킬이 필요한 이유 설명 (감사용, 필수)",
+      "userRequestedDesc": "사용자가 명시적으로 설치를 요청했는지 여부 (true = 사용자 스킬, false = 학습 스킬)"
     },
     "updateSettings": {
       "label": "설정",

@@ -333,6 +333,7 @@ export class Agent {
     // 10. install_skill 工具（需要 agentDir + config + engine.resolveUtilityConfig）
     this._installSkillTool = createInstallSkillTool({
       agentDir: this.agentDir,
+      userSkillsDir: this._engine?.skillsDir,
       getConfig: () => {
         const cfg = { ...this._config };
         // learn_skills 从全局 preferences 注入（覆盖 agent config 中的值）

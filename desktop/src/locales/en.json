@@ -1509,7 +1509,8 @@
       "githubUrlDesc": "GitHub repo URL (Mode A)",
       "skillContentDesc": "Full content of SKILL.md (Mode B)",
       "skillNameDesc": "Skill name (required for Mode B)",
-      "reasonDesc": "Explain why this skill is needed (for audit, required)"
+      "reasonDesc": "Explain why this skill is needed (for audit, required)",
+      "userRequestedDesc": "Whether the user explicitly requested installation (true = user skill, false = learned skill)"
     },
     "updateSettings": {
       "label": "Settings",

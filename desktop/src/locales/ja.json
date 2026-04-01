@@ -1470,7 +1470,8 @@
       "githubUrlDesc": "GitHub リポジトリ URL（モード A）",
       "skillContentDesc": "SKILL.md の完全な内容（モード B）",
       "skillNameDesc": "スキル名（モード B の場合必須）",
-      "reasonDesc": "このスキルが必要な理由の説明（監査用、必須）"
+      "reasonDesc": "このスキルが必要な理由の説明（監査用、必須）",
+      "userRequestedDesc": "ユーザーが明示的にインストールを要求したか（true = ユーザースキル、false = 学習スキル）"
     },
     "updateSettings": {
       "label": "設定",

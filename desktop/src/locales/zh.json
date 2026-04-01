@@ -1509,7 +1509,8 @@
       "githubUrlDesc": "GitHub 仓库 URL（模式 A）",
       "skillContentDesc": "SKILL.md 的完整内容（模式 B）",
       "skillNameDesc": "技能名称（模式 B 必填）",
-      "reasonDesc": "说明为什么需要这个技能（审计用，必填）"
+      "reasonDesc": "说明为什么需要这个技能（审计用，必填）",
+      "userRequestedDesc": "是否由用户主动请求安装（true 时安装为用户技能，否则为自学技能）"
     },
     "updateSettings": {
       "label": "设置",
