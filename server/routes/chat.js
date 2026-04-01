@@ -763,6 +763,11 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
                 const pathNote = savedImagePaths.map(p => `[attached_image: ${p}]`).join("\n");
                 promptText = `${pathNote}\n${promptText}`;
               }
+              // Skill invocation tags
+              if (msg.skills?.length) {
+                const skillNote = msg.skills.map(s => `[Use skill: ${s}]`).join('\n');
+                promptText = `${skillNote}\n${promptText}`;
+              }
               if (!promptText.trim() && msg.images?.length) {
                 promptText = t("error.viewImage");
               }
