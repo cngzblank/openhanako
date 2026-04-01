@@ -326,23 +326,31 @@ async function startServer() {
     })();
 
     if (pidAlive) {
-      // PID 存活，尝试 health check
-      let reused = false;
-      try {
-        const res = await fetch(`http://127.0.0.1:${existingInfo.port}/api/health`, {
-          headers: { Authorization: `Bearer ${existingInfo.token}` },
-          signal: AbortSignal.timeout(2000),
-        });
-        if (res.ok) {
-          console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}`);
-          serverPort = existingInfo.port;
-          serverToken = existingInfo.token;
-          reusedServerPid = existingInfo.pid;
-          reused = true;
-        }
-      } catch { /* health check 网络抖动，继续 kill 旧 server */ }
+      // 版本校验：server-info 中的 version 必须与当前 app 版本一致，
+      // 否则是更新后残存的旧 server，必须杀掉重启
+      const currentVersion = app.getVersion();
+      const serverVersion = existingInfo.version;
+      if (serverVersion && serverVersion !== currentVersion) {
+        console.log(`[desktop] 旧 server 版本不匹配（server: ${serverVersion}, app: ${currentVersion}），终止旧 server`);
+      } else {
+        // PID 存活且版本匹配（或无版本字段的老 server），尝试 health check
+        let reused = false;
+        try {
+          const res = await fetch(`http://127.0.0.1:${existingInfo.port}/api/health`, {
+            headers: { Authorization: `Bearer ${existingInfo.token}` },
+            signal: AbortSignal.timeout(2000),
+          });
+          if (res.ok) {
+            console.log(`[desktop] 复用已运行的 server，端口: ${existingInfo.port}, 版本: ${serverVersion || "unknown"}`);
+            serverPort = existingInfo.port;
+            serverToken = existingInfo.token;
+            reusedServerPid = existingInfo.pid;
+            reused = true;
+          }
+        } catch { /* health check 网络抖动，继续 kill 旧 server */ }
 
-      if (reused) return; // 跳过启动
+        if (reused) return; // 跳过启动
+      }
 
       // PID 存活但 health 失败（无响应或异常）：主动 kill，避免双 server 并存
       console.log(`[desktop] 旧 server (PID ${existingInfo.pid}) 无响应，正在终止...`);
@@ -2273,13 +2281,16 @@ async function shutdownServer() {
       try { serverProcess.kill("SIGTERM"); } catch {}
     }
     await new Promise((resolve) => {
+      let resolved = false;
+      const done = () => { if (!resolved) { resolved = true; resolve(); } };
       const timeout = setTimeout(() => {
         if (serverProcess && !serverProcess.killed) {
           try { serverProcess.kill(); } catch {}
         }
-        resolve();
+        // 强杀后仍等 exit 事件（最多再等 3s），让 OS 释放文件句柄
+        setTimeout(done, 3000);
       }, 5000);
-      serverProcess.on("exit", () => { clearTimeout(timeout); resolve(); });
+      serverProcess.on("exit", () => { clearTimeout(timeout); done(); });
     });
     serverProcess = null;
   } else if (reusedServerPid) {
@@ -2301,6 +2312,8 @@ async function shutdownServer() {
     killPid(reusedServerPid, true);
     reusedServerPid = null;
   }
+  // 清理 server-info.json，防止更新后新版 Electron 误连旧 server
+  try { fs.unlinkSync(path.join(hanakoHome, "server-info.json")); } catch {}
 }
 
 app.on("before-quit", async (event) => {

@@ -332,7 +332,7 @@ try {
   // 写 server-info 文件，供 Electron 检测复用或外部工具查询
   const serverInfoPath = path.join(hanakoHome, "server-info.json");
   try {
-    fs.writeFileSync(serverInfoPath, JSON.stringify({ pid: process.pid, port: actualPort, token: SERVER_TOKEN }));
+    fs.writeFileSync(serverInfoPath, JSON.stringify({ pid: process.pid, port: actualPort, token: SERVER_TOKEN, version: appVersion }));
   } catch (e) {
     console.error("[server] 写入 server-info.json 失败:", e.message);
   }
