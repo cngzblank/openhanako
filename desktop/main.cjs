@@ -832,11 +832,13 @@ function createSettingsWindow(tab, theme) {
 }
 
 // ── Skill 预览 → 主窗口 overlay ──
-function _showSkillViewer(skillInfo) {
+function _showSkillViewer(skillInfo, fromSettings) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("show-skill-viewer", skillInfo);
-    mainWindow.show();
-    mainWindow.focus();
+    if (!fromSettings) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   }
 }
 
@@ -1795,6 +1797,8 @@ wrapIpcHandler("select-plugin", async (event) => {
 // ── Skill 预览窗口 IPC ──
 wrapIpcHandler("open-skill-viewer", (_event, data) => {
   if (!data) return;
+  const fromSettings = settingsWindow && !settingsWindow.isDestroyed()
+    && _event.sender === settingsWindow.webContents;
 
   // .skill / .zip 文件 → 优先查找已安装目录，否则解压临时目录
   if (data.skillPath && path.isAbsolute(data.skillPath)) {
@@ -1805,7 +1809,7 @@ wrapIpcHandler("open-skill-viewer", (_event, data) => {
       // 先检查同名 skill 是否已安装在 skills 目录
       const installedDir = path.join(hanakoHome, "skills", baseName);
       if (fs.existsSync(path.join(installedDir, "SKILL.md"))) {
-        _showSkillViewer({ name: baseName, baseDir: installedDir, installed: false });
+        _showSkillViewer({ name: baseName, baseDir: installedDir, installed: false }, fromSettings);
         return;
       }
 
@@ -1843,7 +1847,7 @@ wrapIpcHandler("open-skill-viewer", (_event, data) => {
         const nameMatch = fmMatch?.[1]?.match(/^name:\s*(.+)$/m);
         const name = nameMatch ? nameMatch[1].trim().replace(/^["']|["']$/g, "") : baseName;
 
-        _showSkillViewer({ name, baseDir: skillDir, installed: false });
+        _showSkillViewer({ name, baseDir: skillDir, installed: false }, fromSettings);
       } catch (err) {
         console.error("[skill-viewer] Failed to extract .skill file:", err.message);
       }
@@ -1852,7 +1856,7 @@ wrapIpcHandler("open-skill-viewer", (_event, data) => {
   }
 
   if (!data.baseDir || !path.isAbsolute(data.baseDir)) return;
-  _showSkillViewer(data);
+  _showSkillViewer(data, fromSettings);
 });
 
 wrapIpcHandler("skill-viewer-list-files", (_event, baseDir) => {
