@@ -47,6 +47,7 @@ export class AgentManager {
     this._switching = false;
     this._activityStores = new Map();
     this._agentListCache = null;       // { raw: [{id,name,yuan,identity}], ts: number }
+    this._descRefreshPending = false;
   }
 
   /** 清除 listAgents 缓存（agent 增删改时调用） */
@@ -116,11 +117,6 @@ export class AgentManager {
       }
     }
     log(`[init] ${this._agents.size} 个 agent 初始化完成`);
-
-    // 异步刷新所有 agent 的 description（fire-and-forget，不阻塞启动）
-    for (const id of this._agents.keys()) {
-      this._refreshDescription(id).catch(() => {});
-    }
   }
 
   // ── List ──
@@ -150,6 +146,18 @@ export class AgentManager {
         return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
       });
     }
+
+    // lazy refresh：在返回列表后，异步刷新缺少 description 的 agent（每次最多 1 个）
+    if (!this._descRefreshPending) {
+      const needsRefresh = agents.find(a => !this._hasDescription(a.id));
+      if (needsRefresh) {
+        this._descRefreshPending = true;
+        this._refreshDescription(needsRefresh.id)
+          .catch(() => {})
+          .finally(() => { this._descRefreshPending = false; });
+      }
+    }
+
     return agents;
   }
 
@@ -190,6 +198,14 @@ export class AgentManager {
       } catch {}
     }
     return agents;
+  }
+
+  /** 检查 description.md 是否存在 */
+  _hasDescription(agentId) {
+    try {
+      fs.accessSync(path.join(this._d.agentsDir, agentId, "description.md"));
+      return true;
+    } catch { return false; }
   }
 
   /**
