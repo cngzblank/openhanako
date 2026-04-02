@@ -394,7 +394,7 @@
     },
     "subagent": {
       "running": "🧭 {name} sent out a clone",
-      "done": "🧭 Clone is back",
+      "done": "🧭 Clone dispatched",
       "failed": "🧭 Clone ran into trouble"
     },
     "ask_agent": {

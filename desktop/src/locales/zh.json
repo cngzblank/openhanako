@@ -394,7 +394,7 @@
     },
     "subagent": {
       "running": "🧭 {name} 分身有术",
-      "done": "🧭 分身回来了",
+      "done": "🧭 分身出发了",
       "failed": "🧭 分身出了岔子"
     },
     "ask_agent": {

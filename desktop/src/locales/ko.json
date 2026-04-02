@@ -393,7 +393,7 @@
     },
     "subagent": {
       "running": "🧭 {name} 분신술!",
-      "done": "🧭 분신이 돌아왔어요",
+      "done": "🧭 분신을 보냈어요",
       "failed": "🧭 분신이 문제가 생겼어요"
     },
     "ask_agent": {
