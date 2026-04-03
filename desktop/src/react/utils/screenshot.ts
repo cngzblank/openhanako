@@ -3,42 +3,50 @@ import html2canvas from 'html2canvas';
 import { useStore } from '../stores';
 import { selectSelectedIdsBySession } from '../stores/session-selectors';
 
-// 临时隐藏按钮和选中高亮的 CSS class（注入一次，全局复用）
+// 临时隐藏按钮、选中高亮、以及非选中消息的 CSS class
 const HIDE_CLASS = 'hana-screenshotting';
 let styleInjected = false;
 function injectHideStyle() {
   if (styleInjected) return;
   const style = document.createElement('style');
-  style.textContent = `.${HIDE_CLASS} [class*="msgActions"] { display:none !important; }
-.${HIDE_CLASS} [class*="messageGroupSelected"] { background:transparent !important; }`;
+  style.textContent = [
+    `.${HIDE_CLASS} [class*="msgActions"] { display:none !important; }`,
+    `.${HIDE_CLASS} [class*="messageGroupSelected"] { background:transparent !important; }`,
+    `.${HIDE_CLASS} .hana-ss-hide { display:none !important; }`,
+    // 截图时隐藏 loadMoreHint、typingIndicator、sessionFooter
+    `.${HIDE_CLASS} [class*="loadMoreHint"] { display:none !important; }`,
+    `.${HIDE_CLASS} [class*="typingIndicator"] { display:none !important; }`,
+    `.${HIDE_CLASS} [class*="sessionFooter"] { display:none !important; }`,
+  ].join('\n');
   document.head.appendChild(style);
   styleInjected = true;
 }
 
 /**
  * 截图指定消息并保存到文件。
- * 直接对原始 DOM 截图（不克隆），保证截出来和看到的一模一样。
- * 多选时分别截每条消息，再用 Canvas API 拼接。
+ *
+ * 直接对消息列表容器 (sessionMessages) 截图，
+ * 把不在选中范围内的消息临时隐藏，保证截出来和 app 里看到的完全一致。
  */
 export async function takeScreenshot(targetMessageId: string, sessionPath: string): Promise<void> {
   const state = useStore.getState();
   const ids = selectSelectedIdsBySession(state, sessionPath);
   const messageIds = ids.length > 0 ? ids : [targetMessageId];
 
-  // 1. 收集 DOM 节点（按文档顺序）
-  const nodes: HTMLElement[] = [];
+  // 1. 收集选中的 DOM 节点
+  const selectedNodes = new Set<HTMLElement>();
   for (const id of messageIds) {
     const el = document.querySelector(`[data-message-id="${id}"]`) as HTMLElement | null;
-    if (el) nodes.push(el);
+    if (el) selectedNodes.add(el);
   }
-  nodes.sort((a, b) => {
-    const pos = a.compareDocumentPosition(b);
-    return pos & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
-  });
+  if (selectedNodes.size === 0) return;
 
-  if (nodes.length === 0) return;
+  // 2. 找到消息列表容器 (sessionMessages)
+  const firstNode = selectedNodes.values().next().value!;
+  const container = firstNode.closest('[class*="sessionMessages"]') as HTMLElement | null;
+  if (!container) return;
 
-  // 2. 判断是否需要隐藏头像（单方消息不显示头像）
+  // 3. 判断是否混合角色
   const roles = new Set<string>();
   const session = state.chatSessions[sessionPath];
   if (session) {
@@ -49,14 +57,25 @@ export async function takeScreenshot(targetMessageId: string, sessionPath: strin
   }
   const isMixed = roles.size > 1;
 
-  // 3. 临时隐藏按钮 + 选中高亮
+  // 4. 临时隐藏：非选中消息 + 按钮 + 选中高亮
   injectHideStyle();
   document.body.classList.add(HIDE_CLASS);
 
-  // 临时隐藏单方消息的头像行
+  const hiddenElements: HTMLElement[] = [];
   const hiddenAvatars: HTMLElement[] = [];
+
+  // 遍历容器的直接子元素，隐藏不在选中范围内的
+  for (const child of Array.from(container.children) as HTMLElement[]) {
+    const msgId = child.getAttribute('data-message-id');
+    if (msgId && !messageIds.includes(msgId)) {
+      child.classList.add('hana-ss-hide');
+      hiddenElements.push(child);
+    }
+  }
+
+  // 单方消息时隐藏头像行
   if (!isMixed) {
-    for (const node of nodes) {
+    for (const node of selectedNodes) {
       const avatarRow = node.querySelector('[class*="avatarRow"]') as HTMLElement | null;
       if (avatarRow && avatarRow.style.display !== 'none') {
         avatarRow.style.display = 'none';
@@ -65,61 +84,53 @@ export async function takeScreenshot(targetMessageId: string, sessionPath: strin
     }
   }
 
-  try {
-    // 4. 逐条截图
-    const scale = 2; // Retina
-    const canvases: HTMLCanvasElement[] = [];
-    for (const node of nodes) {
-      const c = await html2canvas(node, {
-        backgroundColor: null,
-        useCORS: true,
-        allowTaint: true,
-        scale,
-      });
-      canvases.push(c);
-    }
+  // 临时移除容器的 max-width 限制，让截图宽度由内容决定
+  const origMaxWidth = container.style.maxWidth;
+  // 不改 max-width，保持原始布局
 
-    // 5. 拼接所有 canvas
-    const totalH = canvases.reduce((sum, c) => sum + c.height, 0);
-    const maxW = Math.max(...canvases.map(c => c.width));
+  try {
+    // 5. 对容器执行一次 html2canvas
+    const scale = 2;
+    const canvas = await html2canvas(container, {
+      backgroundColor: null,
+      useCORS: true,
+      allowTaint: true,
+      scale,
+    });
+
+    // 6. 加水印：在 canvas 底部追加
     const WATERMARK_H = 40 * scale;
-    const PADDING = 24 * scale;
+    const PADDING_BOTTOM = 12 * scale;
 
     const final = document.createElement('canvas');
-    final.width = maxW + PADDING * 2;
-    final.height = totalH + WATERMARK_H + PADDING * 2;
+    final.width = canvas.width;
+    final.height = canvas.height + WATERMARK_H;
     const ctx = final.getContext('2d')!;
 
-    // 背景色
+    // 背景
     const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#faf8f5';
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, final.width, final.height);
 
-    // 绘制每条消息
-    let y = PADDING;
-    for (const c of canvases) {
-      ctx.drawImage(c, PADDING, y);
-      y += c.height;
-    }
+    // 绘制截图内容
+    ctx.drawImage(canvas, 0, 0);
 
-    // 6. 水印：圆形 logo + 宋体文字（居中）
+    // 水印：圆形 logo + 宋体文字（居中）
     ctx.globalAlpha = 0.5;
     const serifFont = getComputedStyle(document.documentElement).getPropertyValue('--font-serif').trim() || 'serif';
-    const wmY = y + WATERMARK_H / 2;
+    const wmY = canvas.height + WATERMARK_H / 2;
     const logoSize = 20 * scale;
     const gap = 8 * scale;
 
-    // 先设字体以量文字宽度
     ctx.font = `${12 * scale}px ${serifFont}`;
     const textW = ctx.measureText('OpenHanako').width;
 
-    // 画圆形 logo
     const logoImg = new Image();
     logoImg.crossOrigin = 'anonymous';
     const baseUrl = document.baseURI.replace(/\/[^/]*$/, '/');
     await new Promise<void>((resolve) => {
       logoImg.onload = () => resolve();
-      logoImg.onerror = () => resolve(); // logo 加载失败也不阻塞
+      logoImg.onerror = () => resolve();
       logoImg.src = `${baseUrl}assets/Hanako.png`;
     });
 
@@ -128,17 +139,15 @@ export async function takeScreenshot(targetMessageId: string, sessionPath: strin
     const startX = (final.width - totalW) / 2;
 
     if (hasLogo) {
-      const lx = startX;
       ctx.save();
       ctx.beginPath();
-      ctx.arc(lx + logoSize / 2, wmY, logoSize / 2, 0, Math.PI * 2);
+      ctx.arc(startX + logoSize / 2, wmY, logoSize / 2, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(logoImg, lx, wmY - logoSize / 2, logoSize, logoSize);
+      ctx.drawImage(logoImg, startX, wmY - logoSize / 2, logoSize, logoSize);
       ctx.restore();
     }
 
-    // 画文字
     ctx.font = `${12 * scale}px ${serifFont}`;
     ctx.fillStyle = '#999';
     ctx.textAlign = 'left';
@@ -190,8 +199,9 @@ export async function takeScreenshot(targetMessageId: string, sessionPath: strin
     const detail = err?.message || String(err);
     state.addToast(`${t('common.screenshotFailed')}: ${detail}`, 'error', 8000);
   } finally {
-    // 恢复：移除隐藏 class，恢复头像
+    // 恢复所有临时隐藏
     document.body.classList.remove(HIDE_CLASS);
+    for (const el of hiddenElements) el.classList.remove('hana-ss-hide');
     for (const el of hiddenAvatars) el.style.display = '';
   }
 }
