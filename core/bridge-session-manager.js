@@ -198,10 +198,16 @@ export class BridgeSessionManager {
           throw new Error(t("error.bridgeAgentModelNotAvailable", { name: agent.agentName, model: ownerModelId }));
         }
 
+        // 快照 prompt，隔离于其他 session 的 prompt 变更（与 SessionCoordinator.createSession 一致）
+        const ownerPromptSnapshot = agent.buildSystemPrompt();
+        const ownerResourceLoader = Object.create(this._deps.getResourceLoader(), {
+          getSystemPrompt: { value: () => ownerPromptSnapshot },
+        });
+
         sessionOpts = {
           model: ownerModel,
           thinkingLevel: mm.resolveThinkingLevel(prefs?.thinking_level || "auto"),
-          resourceLoader: this._deps.getResourceLoader(),
+          resourceLoader: ownerResourceLoader,
           tools: bridgeTools,
           customTools: bridgeCustomTools,
           settingsManager: this._createSettings(ownerModel),
