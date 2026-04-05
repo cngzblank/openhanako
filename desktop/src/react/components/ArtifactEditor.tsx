@@ -29,6 +29,7 @@ import { markdownTheme, codeTheme } from '../editor/theme';
 import { markdownDecoPlugin } from '../editor/md-decorations';
 import { linkClickHandler } from '../editor/link-handler';
 import { tableDecoField } from '../editor/table-field';
+import { csvTableField } from '../editor/csv-field';
 
 /* ── Types ── */
 
@@ -40,7 +41,7 @@ export interface ArtifactEditorHandle {
 export interface ArtifactEditorProps {
   content: string;
   filePath?: string;
-  mode: 'markdown' | 'code' | 'text';
+  mode: 'markdown' | 'code' | 'csv' | 'text';
   language?: string | null;
   onSelectionChange?: (view: EditorView) => void;
 }
@@ -99,6 +100,7 @@ export const ArtifactEditor = forwardRef<ArtifactEditorHandle, ArtifactEditorPro
       if (!containerRef.current) return;
       const c = cRef.current;
       const isMd = mode === 'markdown';
+      const isCsv = mode === 'csv';
 
       const extensions = [
         drawSelection(),
@@ -121,7 +123,7 @@ export const ArtifactEditor = forwardRef<ArtifactEditorHandle, ArtifactEditorPro
           }
         }),
         // Dynamic compartments
-        c.gutter.of(isMd ? [] : lineNumbers()),
+        c.gutter.of(isMd || isCsv ? [] : lineNumbers()),
         c.lang.of(
           isMd ? markdown({ base: markdownLanguage, codeLanguages: languages }) : [],
         ),
@@ -130,12 +132,13 @@ export const ArtifactEditor = forwardRef<ArtifactEditorHandle, ArtifactEditorPro
         ),
         c.conceal.of(isMd ? markdownDecoPlugin : []),
         ...(isMd ? [tableDecoField] : []),
-        c.theme.of(isMd ? markdownTheme : codeTheme),
+        ...(isCsv ? [csvTableField] : []),
+        c.theme.of(isMd || isCsv ? markdownTheme : codeTheme),
         linkClickHandler,
       ];
 
-      // 代码模式保留行高亮，markdown 模式不要
-      if (!isMd) extensions.push(highlightActiveLine());
+      // 代码模式保留行高亮，markdown / csv 模式不要
+      if (!isMd && !isCsv) extensions.push(highlightActiveLine());
 
       const state = EditorState.create({ doc: content, extensions });
       const view = new EditorView({ state, parent: containerRef.current });
