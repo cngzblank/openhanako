@@ -181,15 +181,14 @@ export function createDeskRoute(engine, hub) {
     if (!entry) return c.json({ error: "activity not found" });
     if (!entry.sessionFile) return c.json({ error: "no session file" });
 
-    // promote 需要先切到对应 agent（promoteActivitySession 操作当前焦点 agent 的目录）
-    if (foundAgentId !== engine.currentAgentId) {
-      return c.json({ error: t("error.activeSessionOnly") });
-    }
-
-    const newPath = engine.promoteActivitySession(entry.sessionFile);
+    const newPath = engine.promoteActivitySession(entry.sessionFile, foundAgentId);
     if (!newPath) return c.json({ error: "promote failed" });
 
-    return c.json({ ok: true, sessionPath: newPath });
+    // 从 ActivityStore 移除已升格的条目
+    const store = engine.getActivityStore(foundAgentId);
+    store?.remove(id);
+
+    return c.json({ ok: true, sessionPath: newPath, agentId: foundAgentId });
   });
 
   /** 用小工具模型快速摘要（DevTools 调试用） */

@@ -1040,7 +1040,8 @@
     "cronDone": "スケジュールタスク完了",
     "error": "実行エラー",
     "viewSession": "セッションを表示 →",
-    "duration": "{text} かかりました"
+    "duration": "{text} かかりました",
+    "promote": "チャットに昇格"
   },
   "automation": {
     "title": "スケジュールタスク",

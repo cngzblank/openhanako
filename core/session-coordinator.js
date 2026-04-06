@@ -629,16 +629,18 @@ export class SessionCoordinator {
     };
   }
 
-  promoteActivitySession(activitySessionFile) {
-    const agent = this._d.getAgent();
+  promoteActivitySession(activitySessionFile, agentId) {
+    const agent = agentId ? this._d.getAgentById(agentId) : this._d.getAgent();
+    if (!agent) return null;
     const oldPath = path.join(agent.agentDir, "activity", activitySessionFile);
     if (!fs.existsSync(oldPath)) return null;
 
     const newPath = path.join(agent.sessionDir, activitySessionFile);
     try {
+      fs.mkdirSync(agent.sessionDir, { recursive: true });
       fs.renameSync(oldPath, newPath);
       agent._memoryTicker?.notifyPromoted(newPath);
-      log.log(`promoted activity session: ${activitySessionFile}`);
+      log.log(`promoted activity session: ${activitySessionFile} (agent=${agent.id})`);
       return newPath;
     } catch (err) {
       log.error(`promoteActivitySession failed: ${err.message}`);

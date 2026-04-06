@@ -1083,7 +1083,8 @@
     "cronDone": "Scheduled task completed",
     "error": "Execution error",
     "viewSession": "View session →",
-    "duration": "Took {text}"
+    "duration": "Took {text}",
+    "promote": "Keep as chat"
   },
   "automation": {
     "title": "Scheduled Tasks",

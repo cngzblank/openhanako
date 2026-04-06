@@ -1083,7 +1083,8 @@
     "cronDone": "定时任务执行完毕",
     "error": "执行异常",
     "viewSession": "查看对话 →",
-    "duration": "耗时 {text}"
+    "duration": "耗时 {text}",
+    "promote": "升格为对话"
   },
   "automation": {
     "title": "任务计划",

@@ -1040,7 +1040,8 @@
     "cronDone": "예약 작업 완료",
     "error": "실행 오류",
     "viewSession": "세션 보기 →",
-    "duration": "{text} 소요"
+    "duration": "{text} 소요",
+    "promote": "대화로 승격"
   },
   "automation": {
     "title": "예약 작업",

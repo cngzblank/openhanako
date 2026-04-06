@@ -1040,7 +1040,8 @@
     "cronDone": "定時任務執行完畢",
     "error": "執行異常",
     "viewSession": "查看對話 →",
-    "duration": "耗時 {text}"
+    "duration": "耗時 {text}",
+    "promote": "升格為對話"
   },
   "automation": {
     "title": "任務計畫",
