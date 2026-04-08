@@ -7,6 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- WS 消息分发，msg 结构由服务端动态决定 */
 
 import { streamBufferManager } from '../hooks/use-stream-buffer';
+import { dispatchStreamKey } from './stream-key-dispatcher';
 import { useStore } from '../stores';
 import { updateKeyed } from '../stores/create-keyed-slice';
 import { loadSessions as loadSessionsAction } from '../stores/session-actions';
@@ -99,6 +100,12 @@ export function handleServerMessage(msg: any): void {
 
   if (msg.type !== 'stream_resume' && isStreamScopedMessage(msg)) {
     updateSessionStreamMeta(msg);
+  }
+
+  // 活跃 block 事件路由：非当前 session 的聊天事件分发到 stream-key-dispatcher
+  if (REACT_CHAT_EVENTS.has(msg.type) && msg.sessionPath && msg.sessionPath !== state.currentSessionPath) {
+    dispatchStreamKey(msg.sessionPath, msg);
+    return;
   }
 
   // ── React 聊天渲染路径：聊天相关事件走 StreamBufferManager ──
