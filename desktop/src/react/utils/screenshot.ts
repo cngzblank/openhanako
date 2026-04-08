@@ -144,7 +144,7 @@ async function fetchAvatarAsDataUrl(role: string, agentId: string | null): Promi
   if (!port || !token) return null;
 
   const url = role === 'user'
-    ? `http://127.0.0.1:${port}/api/user/avatar`
+    ? `http://127.0.0.1:${port}/api/avatar/user`
     : `http://127.0.0.1:${port}/api/agents/${agentId}/avatar`;
 
   const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
