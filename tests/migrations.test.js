@@ -251,3 +251,179 @@ describe("migration #1: cleanDanglingProviderRefs", () => {
     expect(readAgentConfig(agentsDir, "xiaohua").models.chat).toBe("");
   });
 });
+
+// ── 迁移 #2：bridge 配置从全局 prefs 迁移到 per-agent config.yaml ──────────
+
+describe("migration #2: migrateBridgeToPerAgent", () => {
+  let tmpDir, agentsDir, userDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    agentsDir = path.join(tmpDir, "agents");
+    userDir = path.join(tmpDir, "user");
+    fs.mkdirSync(agentsDir, { recursive: true });
+  });
+
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  /** 跳过 migration #1 直接测 #2：把 _dataVersion 设为 1 */
+  function runMigration2(prefs) {
+    const p = prefs.getPreferences();
+    p._dataVersion = 1;
+    prefs.savePreferences(p);
+
+    runMigrations({
+      hanakoHome: tmpDir,
+      agentsDir,
+      prefs,
+      providerRegistry: makeRegistry([]),
+      log: () => {},
+    });
+  }
+
+  it("基本迁移：单 agent，telegram + owner → config.yaml bridge 区块", () => {
+    writeAgentConfig(agentsDir, "hana", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "hana",
+      bridge: {
+        telegram: { token: "tok123", webhook: true },
+        owner: { telegram: "user-001" },
+        readOnly: false,
+      },
+    });
+
+    runMigration2(prefs);
+
+    const config = readAgentConfig(agentsDir, "hana");
+    expect(config.bridge.telegram.token).toBe("tok123");
+    expect(config.bridge.telegram.webhook).toBe(true);
+    expect(config.bridge.telegram.owner).toBe("user-001");
+
+    // prefs.bridge should be deleted
+    const p = prefs.getPreferences();
+    expect(p.bridge).toBeUndefined();
+  });
+
+  it("多 agent 分组：telegram→agent-a，feishu→agent-b", () => {
+    writeAgentConfig(agentsDir, "agent-a", { api: { provider: "" } });
+    writeAgentConfig(agentsDir, "agent-b", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "agent-a",
+      bridge: {
+        telegram: { token: "tg-tok", agentId: "agent-a" },
+        feishu: { appId: "fs-app", agentId: "agent-b" },
+        owner: {},
+        readOnly: false,
+      },
+    });
+
+    runMigration2(prefs);
+
+    const cfgA = readAgentConfig(agentsDir, "agent-a");
+    const cfgB = readAgentConfig(agentsDir, "agent-b");
+
+    expect(cfgA.bridge.telegram.token).toBe("tg-tok");
+    expect(cfgA.bridge.telegram.agentId).toBeUndefined(); // agentId stripped
+    expect(cfgA.bridge.feishu).toBeUndefined();
+
+    expect(cfgB.bridge.feishu.appId).toBe("fs-app");
+    expect(cfgB.bridge.feishu.agentId).toBeUndefined();
+    expect(cfgB.bridge.telegram).toBeUndefined();
+  });
+
+  it("legacy owner key：owner.telegram（无 composite）→ 归入 primary agent", () => {
+    writeAgentConfig(agentsDir, "hana", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "hana",
+      bridge: {
+        telegram: { token: "tok" },
+        owner: { telegram: "legacy-owner" },
+      },
+    });
+
+    runMigration2(prefs);
+
+    const config = readAgentConfig(agentsDir, "hana");
+    expect(config.bridge.telegram.owner).toBe("legacy-owner");
+  });
+
+  it("composite owner key：owner['telegram:agent-a'] → 归入 agent-a", () => {
+    writeAgentConfig(agentsDir, "agent-a", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "agent-a",
+      bridge: {
+        telegram: { token: "tok", agentId: "agent-a" },
+        owner: {
+          telegram: "legacy-owner",
+          "telegram:agent-a": "composite-owner",
+        },
+      },
+    });
+
+    runMigration2(prefs);
+
+    const config = readAgentConfig(agentsDir, "agent-a");
+    // composite key takes priority over legacy key
+    expect(config.bridge.telegram.owner).toBe("composite-owner");
+  });
+
+  it("无 bridge 配置 → no-op", () => {
+    writeAgentConfig(agentsDir, "hana", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({ primaryAgent: "hana" });
+
+    runMigration2(prefs);
+
+    const config = readAgentConfig(agentsDir, "hana");
+    expect(config.bridge).toBeUndefined();
+
+    const p = prefs.getPreferences();
+    expect(p.bridge).toBeUndefined();
+  });
+
+  it("agentId 指向已删除 agent → 回退到 primaryAgent", () => {
+    // agent-a does NOT exist, only hana exists
+    writeAgentConfig(agentsDir, "hana", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "hana",
+      bridge: {
+        telegram: { token: "tok", agentId: "deleted-agent" },
+        owner: {},
+      },
+    });
+
+    runMigration2(prefs);
+
+    const config = readAgentConfig(agentsDir, "hana");
+    expect(config.bridge.telegram.token).toBe("tok");
+    expect(config.bridge.telegram.agentId).toBeUndefined();
+  });
+
+  it("readOnly 只写入 primaryAgent", () => {
+    writeAgentConfig(agentsDir, "primary", { api: { provider: "" } });
+    writeAgentConfig(agentsDir, "secondary", { api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    prefs.savePreferences({
+      primaryAgent: "primary",
+      bridge: {
+        telegram: { token: "tg", agentId: "primary" },
+        feishu: { appId: "fs", agentId: "secondary" },
+        owner: {},
+        readOnly: true,
+      },
+    });
+
+    runMigration2(prefs);
+
+    const cfgPrimary = readAgentConfig(agentsDir, "primary");
+    const cfgSecondary = readAgentConfig(agentsDir, "secondary");
+
+    expect(cfgPrimary.bridge.readOnly).toBe(true);
+    expect(cfgSecondary.bridge.readOnly).toBeUndefined();
+  });
+});

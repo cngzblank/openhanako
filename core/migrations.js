@@ -11,12 +11,15 @@ import fs from "fs";
 import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
+import { saveConfig } from "../lib/memory/config-loader.js";
 
 // ── 迁移表 ──────────────────────────────────────────────────────────────────
 
 const migrations = {
   // #356: 清理悬空 provider 引用（agent config + preferences）
   1: cleanDanglingProviderRefs,
+  // bridge 配置从全局 preferences 迁移到各 agent 的 config.yaml
+  2: migrateBridgeToPerAgent,
 };
 
 // ── Runner ──────────────────────────────────────────────────────────────────
@@ -159,4 +162,89 @@ function cleanDanglingProviderRefs(ctx) {
   if (prefsChanged) {
     prefs.savePreferences(preferences);
   }
+}
+
+/**
+ * #2 — bridge 配置从全局 preferences 迁移到 per-agent config.yaml
+ *
+ * preferences.json 中的 bridge.telegram / feishu / qq / wechat / whatsapp
+ * 各自可能带 agentId 字段指定归属 agent。迁移后每个 platform config
+ * 写入对应 agent 的 config.yaml，owner 信息一并合入，
+ * readOnly 只写入 primaryAgent。迁移完成后删除 prefs.bridge。
+ */
+function migrateBridgeToPerAgent(ctx) {
+  const { agentsDir, prefs, log } = ctx;
+  const preferences = prefs.getPreferences();
+  const bridge = preferences.bridge;
+  if (!bridge) return; // nothing to migrate
+
+  const primaryAgentId = preferences.primaryAgent || null;
+  const ownerDict = bridge.owner || {};
+  const readOnly = !!bridge.readOnly;
+
+  const PLATFORMS = ["telegram", "feishu", "qq", "wechat", "whatsapp"];
+  const agentConfigs = new Map(); // agentId → { platform: config }
+
+  // Find first available agent as ultimate fallback
+  let fallbackAgentId = primaryAgentId;
+  if (!fallbackAgentId) {
+    try {
+      const dirs = fs.readdirSync(agentsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+      if (dirs.length > 0) fallbackAgentId = dirs[0].name;
+    } catch {}
+  }
+
+  for (const platform of PLATFORMS) {
+    const cfg = bridge[platform];
+    if (!cfg) continue;
+
+    // Determine target agent
+    let targetAgentId = cfg.agentId || null;
+    if (targetAgentId) {
+      const agentDir = path.join(agentsDir, targetAgentId);
+      if (!fs.existsSync(agentDir)) {
+        log(`[migrations] bridge.${platform}.agentId "${targetAgentId}" not found, using fallback`);
+        targetAgentId = null;
+      }
+    }
+    if (!targetAgentId) targetAgentId = fallbackAgentId;
+    if (!targetAgentId) {
+      log(`[migrations] no agent available for bridge.${platform}, skipping`);
+      continue;
+    }
+
+    if (!agentConfigs.has(targetAgentId)) agentConfigs.set(targetAgentId, {});
+    const ac = agentConfigs.get(targetAgentId);
+
+    // Clean config: strip agentId field (now implicit by location)
+    const cleanCfg = { ...cfg };
+    delete cleanCfg.agentId;
+
+    // Resolve owner: composite key "platform:agentId" > legacy "platform"
+    const compositeKey = `${platform}:${targetAgentId}`;
+    const owner = ownerDict[compositeKey] || ownerDict[platform] || null;
+    if (owner) cleanCfg.owner = owner;
+
+    ac[platform] = cleanCfg;
+  }
+
+  // Write to each agent's config.yaml
+  for (const [agentId, bridgeConfig] of agentConfigs) {
+    const cfgPath = path.join(agentsDir, agentId, "config.yaml");
+    if (!fs.existsSync(cfgPath)) {
+      log(`[migrations] agent ${agentId} config.yaml not found, skipping`);
+      continue;
+    }
+    // readOnly only goes to primary agent
+    const bridgeBlock = agentId === primaryAgentId
+      ? { ...bridgeConfig, readOnly }
+      : { ...bridgeConfig };
+    saveConfig(cfgPath, { bridge: bridgeBlock });
+    log(`[migrations] migrated bridge config → agent ${agentId} (${Object.keys(bridgeConfig).join(", ")})`);
+  }
+
+  // Delete bridge from global preferences
+  delete preferences.bridge;
+  prefs.savePreferences(preferences);
+  log(`[migrations] deleted prefs.bridge`);
 }
