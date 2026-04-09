@@ -3,12 +3,15 @@
  * Priority: query.agentId > params.agentId > engine.currentAgentId
  */
 
-/** 读操作用：找不到时 fallback 到焦点 agent */
+/** 读操作用：显式 ID 找不到时抛错；无 ID 时用焦点 agent */
 export function resolveAgent(engine, c) {
   const explicit = c.req.query("agentId") || c.req.param("agentId");
   if (explicit) {
-    return engine.getAgent(explicit) || engine.agent;
+    const found = engine.getAgent(explicit);
+    if (!found) throw new AgentNotFoundError(explicit);
+    return found;
   }
+  // 无显式 ID 时用焦点 agent（UI-layer default）
   return engine.getAgent(engine.currentAgentId) || engine.agent;
 }
 

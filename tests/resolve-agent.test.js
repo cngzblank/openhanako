@@ -30,9 +30,19 @@ describe("resolveAgentStrict", () => {
   });
 });
 
-describe("resolveAgent (读操作 fallback)", () => {
-  it("agentId 不存在时 fallback 到焦点 agent", () => {
+describe("resolveAgent (读操作)", () => {
+  it("显式传入有效 agentId 返回对应 agent", () => {
+    const engine = mockEngine({ hana: { id: "hana" }, _focus: { id: "_focus" } });
+    expect(resolveAgent(engine, mockCtx("hana"))).toEqual({ id: "hana" });
+  });
+
+  it("显式传入无效 agentId 抛 AgentNotFoundError", () => {
     const engine = mockEngine({ _focus: { id: "_focus" } });
-    expect(resolveAgent(engine, mockCtx("ghost"))).toEqual({ id: "_focus" });
+    expect(() => resolveAgent(engine, mockCtx("ghost"))).toThrow("not found");
+  });
+
+  it("未传 agentId 时用焦点 agent", () => {
+    const engine = mockEngine({ _focus: { id: "_focus" } });
+    expect(resolveAgent(engine, mockCtx(null))).toEqual({ id: "_focus" });
   });
 });
