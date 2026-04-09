@@ -176,7 +176,7 @@ export class BridgeSessionManager {
         const prefs = this._deps.getPreferences();
         const bridgeReadOnly = !!prefs.bridge?.readOnly;
         const bridgeCwd = homeCwd;
-        const { tools: baseTools, customTools: baseCustomTools } = this._deps.buildTools(bridgeCwd, null, { workspace: homeCwd });
+        const { tools: baseTools, customTools: baseCustomTools } = this._deps.buildTools(bridgeCwd, agent.tools, { workspace: homeCwd, agentDir: agent.agentDir });
 
         const bridgeTools = bridgeReadOnly
           ? baseTools.filter(t => READ_ONLY_BUILTIN_TOOLS.includes(t.name))

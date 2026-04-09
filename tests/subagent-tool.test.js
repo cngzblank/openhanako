@@ -3,6 +3,11 @@ import { createSubagentTool } from "../lib/tools/subagent-tool.js";
 
 // ---- helpers ----------------------------------------------------------------
 
+/** Mock Pi SDK ctx with sessionManager */
+const mockCtx = {
+  sessionManager: { getSessionFile: () => "/test/session.jsonl" },
+};
+
 /**
  * Build a mock executeIsolated that:
  *  - calls opts.onSessionReady(sessionPath) synchronously if provided
@@ -56,7 +61,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
   // 1. fire-and-forget: returns immediately with taskId / streamStatus / sessionPath
   it("dispatches task and returns immediately with running status", async () => {
     const tool = createSubagentTool(deps);
-    const result = await tool.execute("call_1", { task: "查一下项目状态" });
+    const result = await tool.execute("call_1", { task: "查一下项目状态" }, null, null, mockCtx);
 
     // t() returns the key path when locale is not loaded in tests
     expect(result.content[0].text).toMatch(/task-id|subagentDispatched/);
@@ -77,7 +82,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
   // 2. deferred store resolves on success
   it("resolves deferred store on success", async () => {
     const tool = createSubagentTool(deps);
-    await tool.execute("call_1", { task: "成功的任务" });
+    await tool.execute("call_1", { task: "成功的任务" }, null, null, mockCtx);
 
     await vi.waitFor(() => {
       expect(mockStore.resolve).toHaveBeenCalledWith(
@@ -99,7 +104,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       getDeferredStore: () => mockStore,
     }));
 
-    await tool.execute("call_1", { task: "会失败的任务" });
+    await tool.execute("call_1", { task: "会失败的任务" }, null, null, mockCtx);
 
     await vi.waitFor(() => {
       expect(mockStore.fail).toHaveBeenCalledWith(
@@ -118,7 +123,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       emitEvent,
     }));
 
-    const result = await tool.execute("call_1", { task: "完成的任务" });
+    const result = await tool.execute("call_1", { task: "完成的任务" }, null, null, mockCtx);
     const { taskId } = result.details;
 
     await vi.waitFor(() => {
@@ -146,7 +151,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       emitEvent,
     }));
 
-    const result = await tool.execute("call_1", { task: "失败的任务" });
+    const result = await tool.execute("call_1", { task: "失败的任务" }, null, null, mockCtx);
     const { taskId } = result.details;
 
     await vi.waitFor(() => {
@@ -177,7 +182,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
     // Dispatch 5 tasks (fire-and-forget, returns immediately each time)
     const results = [];
     for (let i = 0; i < 5; i++) {
-      results.push(await tool.execute(`call_${i}`, { task: `任务 ${i}` }));
+      results.push(await tool.execute(`call_${i}`, { task: `任务 ${i}` }, null, null, mockCtx));
     }
     // All 5 should be dispatched (running)
     for (const r of results) {
@@ -185,7 +190,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
     }
 
     // 6th task must be rejected
-    const blocked = await tool.execute("call_5", { task: "第六个任务" });
+    const blocked = await tool.execute("call_5", { task: "第六个任务" }, null, null, mockCtx);
     // should mention the limit; t() returns key path when locale is not loaded
     expect(blocked.content[0].text).toMatch(/5|subagentMaxConcurrent/);
     expect(blocked.details).toBeUndefined();
@@ -226,7 +231,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       getDeferredStore: () => mockStore,
     }));
 
-    const result = await tool.execute("call_1", { task: "专项任务", agent: "other-agent" });
+    const result = await tool.execute("call_1", { task: "专项任务", agent: "other-agent" }, null, null, mockCtx);
 
     expect(result.details.agentId).toBe("other-agent");
     expect(captureExecute).toHaveBeenCalledWith(
