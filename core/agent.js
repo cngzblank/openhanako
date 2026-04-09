@@ -284,6 +284,7 @@ export class Agent {
     // 10. 设置修改工具
     this._updateSettingsTool = createUpdateSettingsTool({
       getEngine: () => this._cb?.getEngine?.(),
+      getAgent: () => this,
       getConfirmStore: () => this._cb?.getConfirmStore?.(),
       getSessionPath: () => this._cb?.getCurrentSessionPath?.(),
       emitEvent: (event, sp) => this._cb?.emitEvent?.(event, sp ?? this._cb?.getCurrentSessionPath?.()),

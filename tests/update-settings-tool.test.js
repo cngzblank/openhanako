@@ -74,6 +74,7 @@ describe("update-settings-tool", () => {
     const confirmStore = makeMockConfirmStore(confirmAction);
     const tool = createUpdateSettingsTool({
       getEngine: () => engine,
+      getAgent: () => engine.agent,
       getConfirmStore: () => confirmStore,
       getSessionPath: () => "/sessions/test",
       emitEvent: vi.fn(),
