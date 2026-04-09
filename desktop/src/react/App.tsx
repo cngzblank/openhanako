@@ -38,7 +38,7 @@ import { WindowControls } from './components/WindowControls';
 import { ToastContainer } from './components/ToastContainer';
 import { InputContextMenu } from './components/InputContextMenu';
 import { StatusBar } from './components/StatusBar';
-import { PaperTextureOverlay } from './components/PaperTextureOverlay';
+import { LeavesOverlay } from './components/LeavesOverlay';
 import { initTheme, initDragPrevention } from './bootstrap';
 import { initApp } from './app-init';
 import { MainContent } from './MainContent';
@@ -410,11 +410,11 @@ function App() {
         />
       )}
 
-      {/* Paper texture overlay */}
-      <PaperTextureOverlay />
-
       {/* Connection status bar */}
       <StatusBar />
+
+      {/* Leaves shadow overlay */}
+      <LeavesOverlay />
 
       {/* Input context menu (cut/copy/paste) */}
       <InputContextMenu />

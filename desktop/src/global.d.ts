@@ -45,6 +45,7 @@ declare global {
   function loadSavedFont(): void;
   function setTheme(theme: string): void;
   function setSerifFont(enabled: boolean): void;
+  function setPaperTexture(enabled: boolean): void;
 }
 
 export {};

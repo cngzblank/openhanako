@@ -63,5 +63,19 @@ function loadSavedFont() {
   document.body.classList.toggle("font-sans", !enabled);
 }
 
+/* ── 纸质纹理开关 ── */
+
+function setPaperTexture(enabled) {
+  document.body.classList.toggle("no-paper-texture", !enabled);
+  localStorage.setItem("hana-paper-texture", enabled ? "1" : "0");
+}
+
+function loadSavedPaperTexture() {
+  const saved = localStorage.getItem("hana-paper-texture");
+  // 默认关闭（saved === null → 首次使用）
+  const enabled = saved === "1";
+  document.body.classList.toggle("no-paper-texture", !enabled);
+}
+
 // 暴露给 WS 事件处理器（设置工具远程切换主题用）
 window.applyTheme = setTheme;

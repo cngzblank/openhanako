@@ -28,6 +28,39 @@
     --jian-sidebar-width: 260px;
     --preview-panel-width: 580px;
     --jian-columns: 1;
+
+    /* 纸质纹理（独立于主题） */
+    --paper-texture: url(./assets/textures/rice-paper.png);
+}
+
+/* 关闭纸质纹理 */
+body.no-paper-texture {
+    --paper-texture: none !important;
+}
+
+/* 纸质纹理亮度补偿（抵消 multiply 变暗） */
+body:not(.no-paper-texture)::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    background: rgba(255, 253, 247, 0.12);
+}
+
+/* 纸质纹理 multiply 叠层（纹理渗透到文字和所有内容上） */
+body:not(.no-paper-texture)::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    background-image: var(--paper-texture);
+    background-repeat: repeat;
+    background-size: 120px;
+    background-attachment: fixed;
+    mix-blend-mode: multiply;
+    opacity: 0.35;
 }
 
 /* 无衬线模式：覆盖 --font-serif 为系统无衬线体 */
@@ -72,9 +105,10 @@ html, body {
 body {
     font-family: var(--font-ui);
     background: var(--bg);
-    background-image: var(--bg-texture, none);
+    background-image: var(--paper-texture);
     background-repeat: repeat;
-    background-size: 400px;
+    background-size: 120px;
+    background-attachment: fixed;
     color: var(--text);
     line-height: 1.7;
     font-size: 15px;
@@ -97,7 +131,11 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 12px;
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image: var(--paper-texture);
+    background-repeat: repeat;
+    background-size: 120px;
+    background-attachment: fixed;
     border-bottom: 1px solid var(--overlay-light);
 }
 
@@ -371,22 +409,6 @@ html[data-platform="linux"] .tb-toggle-right {
     opacity: 0.6;
 }
 
-.main-content::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 52px;
-    z-index: 10;
-    pointer-events: none;
-    background: linear-gradient(
-        to bottom,
-        var(--bg) 0%,
-        var(--bg) 40%,
-        transparent 100%
-    );
-}
 
 /* ========================================
    App 布局
@@ -415,7 +437,11 @@ html[data-platform="linux"] .tb-toggle-right {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: var(--sidebar-bg, var(--bg));
+    background-color: var(--sidebar-bg, var(--bg));
+    background-image: var(--paper-texture);
+    background-repeat: repeat;
+    background-size: 120px;
+    background-attachment: fixed;
     border-right: 1px solid var(--overlay-light);
     padding-top: 48px; /* 给 titlebar 留空间 */
     overflow: hidden;
@@ -1749,7 +1775,11 @@ html[data-platform="linux"] .tb-toggle-right {
     left: 0;
     right: 0;
     height: calc(var(--space-lg) + 1.5rem);
-    background: var(--bg);
+    background-color: var(--bg);
+    background-image: var(--paper-texture);
+    background-repeat: repeat;
+    background-size: 120px;
+    background-attachment: fixed;
     z-index: -1;
     pointer-events: none;
 }
@@ -1778,7 +1808,6 @@ html[data-platform="linux"] .tb-toggle-right {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    background: var(--bg);
     padding-top: 48px;
     overflow: hidden;
     transition: width 0.28s var(--ease-out);

@@ -12,6 +12,8 @@ export function InterfaceTab() {
   const { settingsConfig } = useSettingsStore();
   const currentTheme = localStorage.getItem('hana-theme') || 'auto';
   const serifEnabled = localStorage.getItem('hana-font-serif') !== '0';
+  const paperTextureEnabled = localStorage.getItem('hana-paper-texture') === '1';
+  const leavesOverlayEnabled = localStorage.getItem('hana-leaves-overlay') === '1';
 
   const locale = settingsConfig?.locale || 'zh-CN';
   const localeVal = ['zh-CN', 'zh-TW', 'ja', 'ko', 'en'].includes(locale) ? locale
@@ -106,6 +108,37 @@ export function InterfaceTab() {
               onChange={(next) => {
                 setSerifFont?.(next);
                 platform?.settingsChanged?.('font-changed', { serif: next });
+                useSettingsStore.setState({});
+              }}
+            />
+          </div>
+          <div className={styles['tool-caps-item']}>
+            <div className={styles['tool-caps-label']}>
+              <span className={styles['tool-caps-name']}>{t('settings.appearance.paperTexture')}</span>
+              <span className={styles['tool-caps-desc']}>{t('settings.appearance.paperTextureHint')}</span>
+            </div>
+            <Toggle
+              on={paperTextureEnabled}
+              onChange={(next) => {
+                (window as any).setPaperTexture?.(next);
+                platform?.settingsChanged?.('paper-texture-changed', { enabled: next });
+                useSettingsStore.setState({});
+              }}
+            />
+          </div>
+          <div className={styles['tool-caps-item']}>
+            <div className={styles['tool-caps-label']}>
+              <span className={styles['tool-caps-name']}>{t('settings.appearance.leavesOverlay')}</span>
+              <span className={styles['tool-caps-desc']}>{t('settings.appearance.leavesOverlayHint')}</span>
+            </div>
+            <Toggle
+              on={leavesOverlayEnabled}
+              onChange={(next) => {
+                localStorage.setItem('hana-leaves-overlay', next ? '1' : '0');
+                window.dispatchEvent(new CustomEvent('hana-settings', {
+                  detail: { type: 'leaves-overlay-changed', enabled: next },
+                }));
+                platform?.settingsChanged?.('leaves-overlay-changed', { enabled: next });
                 useSettingsStore.setState({});
               }}
             />

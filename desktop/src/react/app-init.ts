@@ -235,6 +235,14 @@ export async function initApp(): Promise<void> {
       case 'font-changed':
         setSerifFont(data.serif);
         break;
+      case 'paper-texture-changed':
+        setPaperTexture(data.enabled);
+        break;
+      case 'leaves-overlay-changed':
+        window.dispatchEvent(new CustomEvent('hana-settings', {
+          detail: { type: 'leaves-overlay-changed', enabled: data.enabled },
+        }));
+        break;
     }
   });
 

@@ -19,7 +19,7 @@
 
 .previewPanelCollapsed {
     width: 0;
-    border-left-color: transparent;
+    border-left: none;
 }
 
 .previewPanelInner {

@@ -8,14 +8,16 @@
 /* ── 全局声明（由 HTML <script> 加载的 lib/*.js 暴露） ── */
 declare function loadSavedTheme(): void;
 declare function loadSavedFont(): void;
+declare function loadSavedPaperTexture(): void;
 declare function initPlatform(): void;
 
 // ── 原子函数 ──
 
-/** 从 localStorage 恢复主题 + 字体偏好 */
+/** 从 localStorage 恢复主题 + 字体 + 纸质纹理偏好 */
 export function initTheme(): void {
   if (typeof loadSavedTheme === 'function') loadSavedTheme();
   if (typeof loadSavedFont === 'function') loadSavedFont();
+  if (typeof loadSavedPaperTexture === 'function') loadSavedPaperTexture();
 }
 
 /** 阻止 Electron 默认的文件拖入导航行为 */
