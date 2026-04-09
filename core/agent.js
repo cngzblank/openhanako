@@ -266,7 +266,7 @@ export class Agent {
     this._cronTool = createCronTool(this._cronStore, {
       getAutoApprove: () => this._config?.desk?.cron_auto_approve !== false,
       confirmStore: this._cb?.getConfirmStore?.(),
-      emitEvent: (event) => this._cb?.emitEvent?.(event, this._cb?.getCurrentSessionPath?.()),
+      emitEvent: (event, sp) => this._cb?.emitEvent?.(event, sp ?? this._cb?.getCurrentSessionPath?.()),
       getSessionPath: () => this._cb?.getCurrentSessionPath?.(),
     });
     this._stageFilesTool = createStageFilesTool();
@@ -286,7 +286,7 @@ export class Agent {
       getEngine: () => this._cb?.getEngine?.(),
       getConfirmStore: () => this._cb?.getConfirmStore?.(),
       getSessionPath: () => this._cb?.getCurrentSessionPath?.(),
-      emitEvent: (event) => this._cb?.emitSessionEvent?.(event),
+      emitEvent: (event, sp) => this._cb?.emitEvent?.(event, sp ?? this._cb?.getCurrentSessionPath?.()),
     });
 
     // 9. 频道工具 + 私信工具（需要 channelsDir 和 agentsDir）

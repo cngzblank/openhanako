@@ -27,6 +27,8 @@ function makeDeps(overrides = {}) {
       defer: vi.fn(),
       resolve: vi.fn(),
       fail: vi.fn(),
+      query: vi.fn(() => ({ meta: {} })),
+      _save: vi.fn(),
     }),
     getSessionPath: () => "/test/session.jsonl",
     listAgents: vi.fn(() => [
@@ -47,7 +49,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
   let deps;
 
   beforeEach(() => {
-    mockStore = { defer: vi.fn(), resolve: vi.fn(), fail: vi.fn() };
+    mockStore = { defer: vi.fn(), resolve: vi.fn(), fail: vi.fn(), query: vi.fn(() => ({ meta: {} })), _save: vi.fn() };
     deps = makeDeps({ getDeferredStore: () => mockStore });
   });
 
