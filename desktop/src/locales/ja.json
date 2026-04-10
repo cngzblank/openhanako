@@ -515,8 +515,8 @@
       "serifFontHint": "本文に明朝体を使用する",
       "paperTexture": "和紙の質感",
       "paperTextureHint": "背景に和紙のテクスチャを追加する",
-      "leavesOverlay": "木漏れ日",
-      "leavesOverlayHint": "ゆっくり流れる葉の影を重ねる"
+      "leavesOverlay": "晴れモード",
+      "leavesOverlayHint": "たまには日向ぼっこしよう"
     },
     "locale": {
       "title": "言語と地域",

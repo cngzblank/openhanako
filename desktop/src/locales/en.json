@@ -517,8 +517,8 @@
       "serifFontHint": "Use serif font for body text",
       "paperTexture": "Paper Texture",
       "paperTextureHint": "Add a rice paper texture to the background",
-      "leavesOverlay": "Leaves Shadow",
-      "leavesOverlayHint": "Overlay slow-moving leaf shadows"
+      "leavesOverlay": "Sunny Mode",
+      "leavesOverlayHint": "Go touch some grass (and sunlight)"
     },
     "locale": {
       "title": "Language & Region",

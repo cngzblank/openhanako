@@ -515,8 +515,8 @@
       "serifFontHint": "본문에 명조 글꼴을 사용해요",
       "paperTexture": "종이 질감",
       "paperTextureHint": "배경에 한지 질감을 추가해요",
-      "leavesOverlay": "나뭇잎 그림자",
-      "leavesOverlayHint": "천천히 흐르는 나뭇잎 그림자를 겹쳐요"
+      "leavesOverlay": "맑은 날 모드",
+      "leavesOverlayHint": "가끔은 햇볕도 쬐어요"
     },
     "locale": {
       "title": "언어 및 지역",

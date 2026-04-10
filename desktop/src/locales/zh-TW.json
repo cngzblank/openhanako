@@ -515,8 +515,8 @@
       "serifFontHint": "使用襯線體顯示正文內容",
       "paperTexture": "紙質紋理",
       "paperTextureHint": "為背景添加宣紙質感",
-      "leavesOverlay": "樹蔭光影",
-      "leavesOverlayHint": "疊加緩慢流動的樹葉陰影"
+      "leavesOverlay": "晴天模式",
+      "leavesOverlayHint": "沒事兒曬曬太陽"
     },
     "locale": {
       "title": "語言和地區",
