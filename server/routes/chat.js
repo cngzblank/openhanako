@@ -501,6 +501,17 @@ export function createChatRoute(engine, hub, { upgradeWebSocket }) {
     }
   });
 
+  // ── 子代理终止 ──
+
+  restRoute.post("/subagent/:taskId/abort", async (c) => {
+    const taskId = c.req.param("taskId");
+    const registry = engine.subagentRegistry;
+    if (!registry) return c.json({ error: "registry unavailable" }, 500);
+    const result = registry.abort(taskId);
+    if (result === "not_found") return c.json({ error: "task not found" }, 404);
+    return c.json({ ok: true, status: result });
+  });
+
   // ── WebSocket 路由（挂载在 wsRoute，由 index.js 挂到根路径） ──
 
   wsRoute.get("/ws",
