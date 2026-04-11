@@ -5,7 +5,7 @@
  * 思考 / 文字输出 / 工具调用 / 已完成 / 失败 / 已中断
  */
 
-import { memo, useState, useEffect, useRef, useMemo } from 'react';
+import { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { subscribeStreamKey } from '../../services/stream-key-dispatcher';
 import { hanaUrl } from '../../hooks/use-hana-fetch';
 import { useStore } from '../../stores';
@@ -20,7 +20,7 @@ interface SubagentCardProps {
     agentId?: string;
     agentName?: string;
     streamKey: string;
-    streamStatus: 'running' | 'done' | 'failed';
+    streamStatus: 'running' | 'done' | 'failed' | 'aborted';
     summary?: string;
   };
 }
@@ -30,6 +30,7 @@ export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardPr
   const [display, setDisplay] = useState<string>(() => {
     if (block.streamStatus === 'done') return block.summary || '已完成';
     if (block.streamStatus === 'failed') return block.summary || '失败';
+    if (block.streamStatus === 'aborted') return block.summary || '已终止';
     return '准备中...';
   });
   const textRef = useRef('');
@@ -56,6 +57,7 @@ export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardPr
     setStatus(block.streamStatus);
     if (block.streamStatus === 'done') setDisplay(block.summary || '已完成');
     if (block.streamStatus === 'failed') setDisplay(block.summary || '失败');
+    if (block.streamStatus === 'aborted') setDisplay(block.summary || '已终止');
   }, [block.streamStatus, block.summary]);
 
   // Subscribe to live events
@@ -96,6 +98,16 @@ export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardPr
 
   const isInterrupted = status === 'running' && !block.streamKey && waitedForKey;
 
+  const handleAbort = useCallback(async () => {
+    try {
+      const res = await fetch(hanaUrl(`/api/subagent/${block.taskId}/abort`), { method: 'POST' });
+      if (res.ok) {
+        setStatus('aborted');
+        setDisplay(window.t?.('subagentAborted') || '已终止');
+      }
+    } catch { /* user-initiated abort; silent on network failure */ }
+  }, [block.taskId]);
+
   return (
     <div className={`${styles.subagentCard} ${styles[`subagent-${status}`]}`}>
       <img
@@ -117,13 +129,18 @@ export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardPr
         <div className={styles.subagentName}>
           {agentName}
           <span className={styles.subagentStatus}>
-            {isInterrupted ? '已中断' : status === 'done' ? '已完成' : status === 'failed' ? '失败' : '已派出'}
+            {isInterrupted ? '已中断' : status === 'aborted' ? '已终止' : status === 'done' ? '已完成' : status === 'failed' ? '失败' : '已派出'}
           </span>
         </div>
         <div className={styles.subagentDisplay}>
           {isInterrupted ? '' : display}
         </div>
       </div>
+      {status === 'running' && !isInterrupted && (
+        <button className={styles.subagentAbortBtn} onClick={handleAbort} title={window.t?.('subagentAbort') || '终止'}>
+          ✕
+        </button>
+      )}
     </div>
   );
 });

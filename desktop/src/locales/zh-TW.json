@@ -1678,5 +1678,7 @@
   "status.reconnecting": "正在重连...",
   "status.disconnected": "连接已断开",
   "status.reconnect": "重新连接",
-  "action.retry": "重试"
+  "action.retry": "重试",
+  "subagentAbort": "終止",
+  "subagentAborted": "已終止"
 }

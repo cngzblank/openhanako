@@ -1728,5 +1728,7 @@
   "status.reconnecting": "Reconnecting...",
   "status.disconnected": "Connection lost",
   "status.reconnect": "Reconnect",
-  "action.retry": "Retry"
+  "action.retry": "Retry",
+  "subagentAbort": "Stop",
+  "subagentAborted": "Stopped"
 }
