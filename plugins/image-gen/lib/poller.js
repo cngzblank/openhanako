@@ -56,6 +56,8 @@ export class Poller {
     this._tickCount = 0;
     /** @type {Map<string, number>} consecutive query error counts per taskId */
     this._errorCounts = new Map();
+    /** @type {Set<string>} taskIds cancelled — fence against in-flight queries */
+    this._cancelled = new Set();
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -82,6 +84,25 @@ export class Poller {
   }
 
   /**
+   * Cancel a task. Adds to cancellation fence so in-flight queries are ignored.
+   * @param {string} taskId
+   */
+  cancel(taskId) {
+    if (!this._active.has(taskId)) return;
+    this._cancelled.add(taskId);
+    this._active.delete(taskId);
+    this._errorCounts.delete(taskId);
+    this._store.update(taskId, {
+      status: "failed",
+      failReason: "user cancelled",
+      completedAt: new Date().toISOString(),
+    });
+    this._bus.request("deferred:abort", { taskId, reason: "user cancelled" }).catch(() => {});
+    this._bus.request("task:remove", { taskId }).catch(() => {});
+    this._log.info(`[image-gen] task ${taskId} cancelled by user`);
+  }
+
+  /**
    * Recover pending tasks from the store and start the polling interval.
    */
   start() {
@@ -94,6 +115,13 @@ export class Poller {
         sessionPath: task.sessionPath,
         meta: { type: task.type === "video" ? "video-generation" : "image-generation", prompt: task.prompt },
       }).catch(() => {}); // ignore if no active session yet
+      // Re-register in TaskRegistry so the task is visible and cancellable
+      this._bus.request("task:register", {
+        taskId: task.taskId,
+        type: "media-generation",
+        parentSessionPath: task.sessionPath,
+        meta: { type: task.type === "video" ? "video-generation" : "image-generation" },
+      }).catch(() => {});
     }
     if (pending.length > 0) {
       this._log.info(`[image-gen] poller recovered ${pending.length} pending task(s)`);
@@ -156,6 +184,9 @@ export class Poller {
    * @param {object} task   Shallow copy from store.get()
    */
   async _checkTask(taskId, task) {
+    // Cancellation fence: if cancel() was called while a query was in-flight, bail out.
+    if (this._cancelled.has(taskId)) return;
+
     // Fake-async: adapter populated files synchronously during submit.
     if (task.files && task.files.length > 0) {
       const dims = await this._readImageDimensions(task.files);
@@ -165,6 +196,7 @@ export class Poller {
         completedAt: new Date().toISOString(),
       });
       this._active.delete(taskId);
+      this._bus.request("task:remove", { taskId }).catch(() => {});
       await this._bus.request("deferred:resolve", { taskId, files: task.files });
       return;
     }
@@ -179,6 +211,7 @@ export class Poller {
         completedAt: new Date().toISOString(),
       });
       this._active.delete(taskId);
+      this._bus.request("task:remove", { taskId }).catch(() => {});
       await this._bus.request("deferred:fail", { taskId, error: err });
       return;
     }
@@ -192,6 +225,8 @@ export class Poller {
     let result;
     try {
       result = await adapter.query(taskId, ctx);
+      // Re-check cancellation fence after await — cancel() may have fired while query was in-flight
+      if (this._cancelled.has(taskId)) return;
     } catch (err) {
       const count = (this._errorCounts.get(taskId) || 0) + 1;
       this._errorCounts.set(taskId, count);
@@ -207,6 +242,7 @@ export class Poller {
         completedAt: new Date().toISOString(),
       });
       this._active.delete(taskId);
+      this._bus.request("task:remove", { taskId }).catch(() => {});
       await this._bus.request("deferred:fail", { taskId, error: err });
       return;
     }
@@ -226,6 +262,7 @@ export class Poller {
         completedAt: new Date().toISOString(),
       });
       this._active.delete(taskId);
+      this._bus.request("task:remove", { taskId }).catch(() => {});
       await this._bus.request("deferred:resolve", { taskId, files });
       return;
     }
@@ -238,6 +275,7 @@ export class Poller {
         completedAt: new Date().toISOString(),
       });
       this._active.delete(taskId);
+      this._bus.request("task:remove", { taskId }).catch(() => {});
       await this._bus.request("deferred:fail", {
         taskId,
         error: result.error ?? { code: "GEN_FAILED", message: failReason },

@@ -96,10 +96,17 @@ export default class ImageGenPlugin {
     // Start poller
     poller.start();
 
+    // Register media-generation task handler for TaskRegistry
+    bus.request("task:register-handler", {
+      type: "media-generation",
+      abort: (taskId) => { poller.cancel(taskId); },
+    }).catch(() => {});
+
     // Cleanup
     this.register(() => {
       poller.stop();
       store.destroy();
+      bus.request("task:unregister-handler", { type: "media-generation" }).catch(() => {});
       log.info("image-gen plugin unloaded");
     });
 

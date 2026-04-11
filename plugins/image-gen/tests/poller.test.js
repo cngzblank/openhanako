@@ -340,6 +340,91 @@ describe("Poller", () => {
     poller.stop();
   });
 
+  // ── cancel ─────────────────────────────────────────────────────────────────
+
+  it("cancel removes task from active, marks failed in store, and calls deferred:abort + task:remove", () => {
+    const { poller, mockStore, mockBus } = makePoller();
+
+    poller.start();
+    poller.add("task1");
+    expect(poller.hasPending("task1")).toBe(true);
+
+    poller.cancel("task1");
+
+    // Removed from active set
+    expect(poller.hasPending("task1")).toBe(false);
+
+    // Store updated to failed
+    expect(mockStore.update).toHaveBeenCalledWith(
+      "task1",
+      expect.objectContaining({ status: "failed", failReason: "user cancelled" })
+    );
+
+    // Bus calls: deferred:abort and task:remove
+    expect(mockBus.request).toHaveBeenCalledWith(
+      "deferred:abort",
+      expect.objectContaining({ taskId: "task1", reason: "user cancelled" })
+    );
+    expect(mockBus.request).toHaveBeenCalledWith(
+      "task:remove",
+      expect.objectContaining({ taskId: "task1" })
+    );
+
+    poller.stop();
+  });
+
+  it("cancel is a no-op for unknown taskId", () => {
+    const { poller, mockStore, mockBus } = makePoller();
+    poller.start();
+
+    poller.cancel("nonexistent");
+
+    expect(mockStore.update).not.toHaveBeenCalled();
+    expect(mockBus.request).not.toHaveBeenCalled();
+
+    poller.stop();
+  });
+
+  it("cancelled task is ignored by _checkTask even if query was in-flight", async () => {
+    // Simulate: adapter.query is slow, cancel arrives before query returns
+    let resolveQuery;
+    const mockAdapter = makeAdapter({
+      query: vi.fn(() => new Promise((r) => { resolveQuery = r; })),
+    });
+    const { poller, mockStore, mockBus } = makePoller({ adapter: mockAdapter });
+
+    mockStore.get.mockReturnValue({
+      taskId: "task1",
+      adapterId: "test-adapter",
+      status: "pending",
+      files: [],
+      createdAt: new Date().toISOString(),
+    });
+
+    poller.start();
+    poller.add("task1");
+
+    // Trigger tick — adapter.query starts but hasn't resolved
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mockAdapter.query).toHaveBeenCalled();
+
+    // Cancel while query is in-flight
+    poller.cancel("task1");
+    expect(poller.hasPending("task1")).toBe(false);
+
+    // Now resolve the query — _checkTask should bail out due to cancellation fence
+    resolveQuery({ status: "success", files: ["img.png"] });
+    await vi.advanceTimersByTimeAsync(0); // flush microtasks
+
+    // deferred:resolve should NOT have been called (only deferred:abort and task:remove from cancel)
+    const resolveCall = mockBus.request.mock.calls.find(
+      ([type]) => type === "deferred:resolve"
+    );
+    expect(resolveCall).toBeUndefined();
+
+    poller.stop();
+  });
+
   // ── recover pending from store on start ───────────────────────────────────
 
   it("recovers pending tasks from the store on start", () => {

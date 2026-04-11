@@ -92,6 +92,16 @@ export async function execute(input, ctx) {
       ctx.log.warn(`deferred:register failed for ${r.taskId}:`, err);
     }
 
+    // Register in TaskRegistry for visibility and cancellation
+    try {
+      await ctx.bus.request("task:register", {
+        taskId: r.taskId,
+        type: "media-generation",
+        parentSessionPath: ctx.sessionPath,
+        meta: { type: "image-generation", prompt: input.prompt },
+      });
+    } catch {}
+
     // Add to poller (handles fake-async detection internally)
     poller.add(r.taskId);
   }
