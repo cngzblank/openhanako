@@ -52,7 +52,7 @@ import { createSandboxedTools } from "../lib/sandbox/index.js";
 import { t } from "../server/i18n.js";
 import { CheckpointStore } from "../lib/checkpoint-store.js";
 import { wrapWithCheckpoint } from "../lib/checkpoint-wrapper.js";
-import { SubagentTaskRegistry } from "../lib/subagent-task-registry.js";
+import { TaskRegistry } from "../lib/task-registry.js";
 
 export class HanaEngine {
   /**
@@ -159,8 +159,8 @@ export class HanaEngine {
       getHomeCwd: (agentId) => this.getHomeCwd(agentId),
     });
 
-    // Subagent 任务注册表（外部 abort 用）
-    this._subagentRegistry = new SubagentTaskRegistry();
+    // 任务注册表（外部 abort 用）
+    this._subagentRegistry = new TaskRegistry();
 
     // Checkpoint 备份存储
     this._checkpointStore = new CheckpointStore(
