@@ -1289,15 +1289,6 @@
     "cronDisabled": "已禁用",
     "notifySent": "已发送通知: {title}",
     "notifyFailed": "通知发送失败: {msg}",
-    "todoNone": "没有待办",
-    "todoAddNeedText": "错误：add 需要提供 text 参数",
-    "todoAdded": "添加待办 #{id}: {text}",
-    "todoToggleNeedId": "错误：toggle 需要提供 id 参数",
-    "todoNotFound": "待办 #{id} 不存在",
-    "todoToggled": "待办 #{id} {state}",
-    "todoDone": "✓ 完成",
-    "todoUndone": "○ 未完成",
-    "todoCleared": "已清空 {count} 条待办",
     "artifactCreated": "已创建预览: {title}",
     "pinnedAlreadyExists": "这条已经在置顶记忆里了。",
     "pinnedAdded": "已记住：{content}",
@@ -1558,12 +1549,15 @@
       "titleDesc": "通知标题（简短）",
       "bodyDesc": "通知内容"
     },
-    "todo": {
+    "todoWrite": {
       "label": "待办",
-      "description": "管理当前 session 内的待办清单。在执行多步骤任务时，用这个工具追踪进度、拆分子任务。\n操作：\n- list：查看所有待办\n- add(text)：添加一条待办\n- toggle(id)：切换完成状态\n- clear：清空所有待办",
-      "actionDesc": "操作类型",
-      "textDesc": "待办内容（add 时必填）",
-      "idDesc": "待办 ID（toggle 时必填）"
+      "description": "管理当前 session 内的待办清单。每次调用传入完整的 todos 数组覆盖当前状态（替换式）。\n每条 todo 需要：\n- content：静态描述（如『读取 spec』）\n- activeForm：执行中态描述（如『正在读取 spec』）\n- status：pending | in_progress | completed\n约定同时最多一条 in_progress。",
+      "contentDesc": "todo 的静态描述文本",
+      "activeFormDesc": "执行中态的描述文本（用于 UI 展示 in_progress 时）",
+      "statusDesc": "三态：pending / in_progress / completed",
+      "todosDesc": "完整的 todo 列表，每次调用都会覆盖旧列表",
+      "summaryEmpty": "清空待办",
+      "summaryStats": "共 {total} 条待办：{completed} 完成，{in_progress} 进行中，{pending} 待处理"
     },
     "pinnedMemory": {
       "pinLabel": "置顶记忆",

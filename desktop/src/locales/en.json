@@ -1284,15 +1284,6 @@
     "cronDisabled": "disabled",
     "notifySent": "Notification sent: {title}",
     "notifyFailed": "Notification failed: {msg}",
-    "todoNone": "No todos",
-    "todoAddNeedText": "Error: add requires text parameter",
-    "todoAdded": "Added todo #{id}: {text}",
-    "todoToggleNeedId": "Error: toggle requires id parameter",
-    "todoNotFound": "Todo #{id} not found",
-    "todoToggled": "Todo #{id} {state}",
-    "todoDone": "✓ Done",
-    "todoUndone": "○ Not done",
-    "todoCleared": "Cleared {count} todos",
     "artifactCreated": "Preview created: {title}",
     "pinnedAlreadyExists": "This is already in pinned memory.",
     "pinnedAdded": "Remembered: {content}",
@@ -1553,12 +1544,15 @@
       "titleDesc": "Notification title (brief)",
       "bodyDesc": "Notification content"
     },
-    "todo": {
+    "todoWrite": {
       "label": "Todo",
-      "description": "Manage a todo list within the current session. Use this tool to track progress and break down sub-tasks when performing multi-step tasks.\nActions:\n- list: View all todos\n- add(text): Add a todo item\n- toggle(id): Toggle completion status\n- clear: Clear all todos",
-      "actionDesc": "Action type",
-      "textDesc": "Todo content (required for add)",
-      "idDesc": "Todo ID (required for toggle)"
+      "description": "Manage the todo list for the current session. Pass the complete todos array each call to replace the current state (replacement style).\nEach todo needs:\n- content: static description (e.g. 'Read spec')\n- activeForm: in-progress description (e.g. 'Reading spec')\n- status: pending | in_progress | completed\nConvention: at most one in_progress at a time.",
+      "contentDesc": "Static description of the todo",
+      "activeFormDesc": "In-progress form description (shown in UI while in_progress)",
+      "statusDesc": "One of: pending / in_progress / completed",
+      "todosDesc": "Complete todo list; each call replaces the previous list",
+      "summaryEmpty": "Cleared todos",
+      "summaryStats": "{total} todos: {completed} completed, {in_progress} in progress, {pending} pending"
     },
     "pinnedMemory": {
       "pinLabel": "Pin Memory",

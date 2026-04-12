@@ -1240,15 +1240,6 @@
     "cronDisabled": "已停用",
     "notifySent": "已傳送通知: {title}",
     "notifyFailed": "通知傳送失敗: {msg}",
-    "todoNone": "沒有待辦",
-    "todoAddNeedText": "錯誤：add 需要提供 text 參數",
-    "todoAdded": "新增待辦 #{id}: {text}",
-    "todoToggleNeedId": "錯誤：toggle 需要提供 id 參數",
-    "todoNotFound": "待辦 #{id} 不存在",
-    "todoToggled": "待辦 #{id} {state}",
-    "todoDone": "✓ 完成",
-    "todoUndone": "○ 未完成",
-    "todoCleared": "已清空 {count} 條待辦",
     "artifactCreated": "已建立預覽: {title}",
     "pinnedAlreadyExists": "這條已經在置頂記憶裡了。",
     "pinnedAdded": "已記住：{content}",
@@ -1508,12 +1499,15 @@
       "titleDesc": "通知標題（簡短）",
       "bodyDesc": "通知內容"
     },
-    "todo": {
+    "todoWrite": {
       "label": "待辦",
-      "description": "管理目前 session 內的待辦清單。在執行多步驟任務時，用這個工具追蹤進度、拆分子任務。\n操作：\n- list：查看所有待辦\n- add(text)：新增一條待辦\n- toggle(id)：切換完成狀態\n- clear：清空所有待辦",
-      "actionDesc": "操作類型",
-      "textDesc": "待辦內容（add 時必填）",
-      "idDesc": "待辦 ID（toggle 時必填）"
+      "description": "管理當前 session 內的待辦清單。每次呼叫傳入完整的 todos 陣列覆蓋當前狀態（替換式）。\n每條 todo 需要：\n- content：靜態描述（如『讀取 spec』）\n- activeForm：執行中態描述（如『正在讀取 spec』）\n- status：pending | in_progress | completed\n約定同時最多一條 in_progress。",
+      "contentDesc": "todo 的靜態描述文字",
+      "activeFormDesc": "執行中態的描述文字（用於 UI 展示 in_progress 時）",
+      "statusDesc": "三態：pending / in_progress / completed",
+      "todosDesc": "完整的 todo 清單，每次呼叫都會覆蓋舊清單",
+      "summaryEmpty": "清空待辦",
+      "summaryStats": "共 {total} 條待辦：{completed} 完成，{in_progress} 進行中，{pending} 待處理"
     },
     "pinnedMemory": {
       "pinLabel": "釘選記憶",

@@ -1240,15 +1240,6 @@
     "cronDisabled": "無効化しました",
     "notifySent": "通知を送信しました: {title}",
     "notifyFailed": "通知の送信に失敗しました: {msg}",
-    "todoNone": "タスクはありません",
-    "todoAddNeedText": "エラー：add には text パラメータが必要です",
-    "todoAdded": "タスク #{id} を追加しました: {text}",
-    "todoToggleNeedId": "エラー：toggle には id パラメータが必要です",
-    "todoNotFound": "タスク #{id} が見つかりません",
-    "todoToggled": "タスク #{id} {state}",
-    "todoDone": "✓ 完了",
-    "todoUndone": "○ 未完了",
-    "todoCleared": "{count} 件のタスクをクリアしました",
     "artifactCreated": "プレビューを作成しました: {title}",
     "pinnedAlreadyExists": "これは既にピン留めメモリにあります。",
     "pinnedAdded": "記憶しました：{content}",
@@ -1508,12 +1499,15 @@
       "titleDesc": "通知タイトル（簡潔に）",
       "bodyDesc": "通知内容"
     },
-    "todo": {
-      "label": "ToDo",
-      "description": "現在の session 内の ToDo リストを管理します。複数ステップのタスクを実行する際に、進捗追跡やサブタスクの分割に使います。\n操作：\n- list：全 ToDo を表示\n- add(text)：ToDo を追加\n- toggle(id)：完了状態を切り替え\n- clear：全 ToDo をクリア",
-      "actionDesc": "操作タイプ",
-      "textDesc": "ToDo の内容（add の場合必須）",
-      "idDesc": "ToDo ID（toggle の場合必須）"
+    "todoWrite": {
+      "label": "TODO",
+      "description": "現在のセッションの TODO リストを管理します。呼び出すたびに完全な todos 配列を渡して現在の状態を置き換えます（置換スタイル）。\n各 TODO に必要：\n- content: 静的な説明（例：『仕様を読む』）\n- activeForm: 実行中の説明（例：『仕様を読んでいます』）\n- status: pending | in_progress | completed\n慣例：同時に実行中は最大 1 つまで。",
+      "contentDesc": "TODO の静的な説明",
+      "activeFormDesc": "実行中の形式の説明（UI で in_progress 表示時に使用）",
+      "statusDesc": "pending / in_progress / completed のいずれか",
+      "todosDesc": "完全な TODO リスト。呼び出すたびに以前のリストを置き換えます",
+      "summaryEmpty": "TODO をクリア",
+      "summaryStats": "合計 {total} 件：{completed} 完了、{in_progress} 進行中、{pending} 保留中"
     },
     "pinnedMemory": {
       "pinLabel": "メモリをピン留め",
