@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage, ChatListItem, ContentBlock } from '../stores/chat-types';
+import type { TodoItem } from '../types';
 import { parseMoodFromContent, parseCardFromContent, parseUserAttachments } from './message-parser';
 import { renderMarkdown } from './markdown';
 
@@ -39,7 +40,7 @@ export interface HistoryApiResponse {
     afterIndex: number;
     card: { type: string; pluginId: string; route: string; title?: string; description?: string };
   }>;
-  todos?: any[];
+  todos?: TodoItem[];
   hasMore?: boolean;
 }
 

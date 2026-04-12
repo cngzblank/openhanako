@@ -100,9 +100,12 @@ export interface DeskFile {
   mtime?: string;
 }
 
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
 export interface TodoItem {
-  text: string;
-  done: boolean;
+  content: string;
+  activeForm: string;
+  status: TodoStatus;
 }
 
 // ── 浮动面板类型 ──

@@ -10,6 +10,7 @@
 import { useStore } from './index';
 import { hanaFetch, hanaUrl } from '../hooks/use-hana-fetch';
 import { buildItemsFromHistory } from '../utils/history-builder';
+import { migrateLegacyTodos } from '../utils/todo-compat';
 import { loadAvatars as loadAvatarsAction, clearChat as clearChatAction } from './agent-actions';
 import { loadDeskFiles } from './desk-actions';
 import { syncPreviewPanelForOwner } from './artifact-actions';
@@ -30,8 +31,10 @@ export async function loadMessages(forPath?: string): Promise<void> {
   try {
     const res = await hanaFetch(`/api/sessions/messages?path=${encodeURIComponent(targetPath)}`);
     const data = await res.json();
-    // per-session todos
-    useStore.getState().setSessionTodosForPath(targetPath, data.todos || []);
+    // per-session todos（防御性兼容层：即使后端漏转或缓存残留，这里兜底再转一次）
+    const rawTodos = data.todos || [];
+    const migratedTodos = migrateLegacyTodos({ todos: rawTodos });
+    useStore.getState().setSessionTodosForPath(targetPath, migratedTodos);
     const items = buildItemsFromHistory(data);
     if (items.length > 0) {
       useStore.getState().initSession(targetPath, items, data.hasMore ?? false);

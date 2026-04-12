@@ -526,28 +526,6 @@
     display: block;
 }
 
-/* 单条待办 */
-.todo-item {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-.todo-item.done {
-    color: var(--text-muted);
-    text-decoration: line-through;
-}
-
-.todo-check {
-    font-size: 0.7rem;
-    flex-shrink: 0;
-    color: var(--accent);
-}
-
-.todo-item.done .todo-check {
-    opacity: 0.5;
-}
-
 /* ── Todo Bar（accent 标签，靠右贴底） ── */
 
 .todo-bar {
@@ -639,6 +617,26 @@
 
 .todo-bar-done .todo-bar-check {
     opacity: 0.5;
+}
+
+/* Three-state variants for Claude Code-aligned TodoWrite */
+.todo-bar-pending {
+    /* default (inherit from .todo-bar-item) */
+}
+
+.todo-bar-in-progress {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.todo-bar-in-progress .todo-bar-check {
+    color: var(--accent);
+    opacity: 1;
+}
+
+.todo-bar-pending .todo-bar-check {
+    color: var(--text-muted);
+    opacity: 0.7;
 }
 
 /* 斜杠命令菜单 */

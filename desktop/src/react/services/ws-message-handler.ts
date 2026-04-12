@@ -22,6 +22,8 @@ import {
   isStreamScopedMessage,
   updateSessionStreamMeta,
 } from './stream-resume';
+import { TODO_TOOL_NAMES, type TodoToolName } from '../utils/todo-constants';
+import { migrateLegacyTodos } from '../utils/todo-compat';
 
 declare function t(key: string, vars?: Record<string, string>): any;
 
@@ -124,11 +126,15 @@ export function handleServerMessage(msg: any): void {
         }
       }
     }
-    // tool_end 后更新 todo
-    if (msg.type === 'tool_end' && msg.name === 'todo' && msg.details?.todos) {
+    // tool_end 后更新 todo（兼容新旧工具名 + 新旧格式）
+    if (msg.type === 'tool_end' && TODO_TOOL_NAMES.includes(msg.name as TodoToolName)) {
       const sp = msg.sessionPath;
-      if (!sp) { console.warn('[ws] tool_end(todo) missing sessionPath, skipping'); }
-      else useStore.getState().setSessionTodosForPath(sp, msg.details.todos);
+      if (!sp) {
+        console.warn('[ws] tool_end(todo) missing sessionPath, skipping');
+      } else {
+        const todos = migrateLegacyTodos(msg.details as { todos?: unknown[] } | null);
+        useStore.getState().setSessionTodosForPath(sp, todos);
+      }
     }
     // compaction_end 后更新 token
     if (msg.type === 'compaction_end') {
