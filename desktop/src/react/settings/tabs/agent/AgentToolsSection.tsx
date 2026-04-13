@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { t, autoSaveConfig } from "../../helpers";
 import { Toggle } from "../../widgets/Toggle";
 import styles from "../../Settings.module.css";
@@ -31,15 +31,26 @@ export function AgentToolsSection({ availableTools, disabled }: Props) {
     availableTools.includes(name)
   );
 
-  // No local optimistic state. Toggle's on/off state is fully derived from
-  // the `disabled` prop, which comes from settingsConfig. autoSaveConfig
-  // re-fetches config on success and the new prop flows back; on failure,
-  // settingsConfig stays the same and the toggle naturally returns to its
-  // pre-click visual state.
-  const toggleTool = (name: OptionalToolName, currentlyOn: boolean) => {
-    const newDisabled = currentlyOn
-      ? [...disabled, name]
-      : disabled.filter((n) => n !== name);
+  // Toggle visual state is derived from the `disabled` prop (no useState),
+  // but writes must be computed from the freshest known list, not the prop
+  // captured at the previous render. Rapid-click-before-prop-refresh would
+  // otherwise rebuild `newDisabled` from stale data and silently clobber the
+  // earlier click. disabledRef tracks the latest known value (updated both
+  // by prop sync below and optimistically after each toggleTool call) so
+  // two consecutive toggles on different tools before the first PUT+GET
+  // round-trip both survive.
+  const disabledRef = useRef(disabled);
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
+  const toggleTool = (name: OptionalToolName) => {
+    const current = disabledRef.current;
+    const currentlyOff = current.includes(name);
+    const newDisabled = currentlyOff
+      ? current.filter((n) => n !== name)
+      : [...current, name];
+    disabledRef.current = newDisabled;
     autoSaveConfig({ tools: { disabled: newDisabled } });
   };
 
@@ -72,7 +83,7 @@ export function AgentToolsSection({ availableTools, disabled }: Props) {
                   {t(`settings.agent.tools.items.${name}.summary`)}
                 </div>
               </div>
-              <Toggle on={isOn} onChange={() => toggleTool(name, isOn)} />
+              <Toggle on={isOn} onChange={() => toggleTool(name)} />
             </div>
           );
         })}

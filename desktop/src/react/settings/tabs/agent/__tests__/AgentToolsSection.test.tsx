@@ -113,6 +113,25 @@ describe("AgentToolsSection", () => {
     expect(container.textContent).toContain("settings.agent.tools.description");
   });
 
+  it("two rapid clicks on different toggles both reach autoSaveConfig (P2 race regression)", () => {
+    // Scenario: user disables browser, then disables cron before the first
+    // PUT+GET round-trip refreshes the `disabled` prop. Without the useRef
+    // fix the second click would build newDisabled from the stale prop
+    // (still []), producing ["cron"] and silently losing the browser change.
+    const { container } = render(
+      <AgentToolsSection availableTools={["browser", "cron"]} disabled={[]} />
+    );
+    clickToggle(getRow(container, "browser"));
+    clickToggle(getRow(container, "cron"));
+
+    expect(autoSaveConfig).toHaveBeenNthCalledWith(1, {
+      tools: { disabled: ["browser"] },
+    });
+    expect(autoSaveConfig).toHaveBeenNthCalledWith(2, {
+      tools: { disabled: ["browser", "cron"] },
+    });
+  });
+
   it("returns null when no optional tools are available", () => {
     const { container } = render(
       <AgentToolsSection availableTools={["read", "bash"]} disabled={[]} />

@@ -198,28 +198,45 @@ After dispatching subagent or other background tasks:
     //   A. restore=true + meta has toolNames  → replay the snapshot (applied below)
     //   B. restore=true + meta missing        → legacy session, keep all tools
     //   C. restore=false                       → fresh compute from agent config
-    const allToolNames = (agent.tools || []).map((t) => t.name).filter(Boolean);
+    //
+    // allToolNames must cover the COMPLETE active set: Pi SDK built-ins
+    // (read/bash/edit/write/grep/find/ls) from sessionTools + OpenHanako
+    // customs + plugin tools from sessionCustomTools. Using only agent.tools
+    // would silently drop SDK built-ins and plugin tools when
+    // setActiveToolsByName is applied.
+    const allToolNames = [
+      ...(sessionTools || []).map((t) => t.name).filter(Boolean),
+      ...(sessionCustomTools || []).map((t) => t.name).filter(Boolean),
+    ];
     let snapshotToolNames = null;  // null signals "do not call setActiveToolsByName"
 
     if (restore) {
       if (sessionPath) {
         const metaPathForRestore = path.join(agent.sessionDir, "session-meta.json");
         let metaEntry = null;
+        let metaReadFailed = false;
         try {
           const raw = await fsp.readFile(metaPathForRestore, "utf-8");
           const meta = JSON.parse(raw);
           metaEntry = meta[path.basename(sessionPath)];
         } catch (err) {
           if (err.code !== "ENOENT") {
-            // Surface permission / parse errors; silent Case B fallback would
-            // re-enable disabled tools on restore, violating the user contract.
-            log.warn(`session-meta read for tool-snapshot restore failed: ${err.message}`);
+            metaReadFailed = true;
+            log.warn(`session-meta read for tool-snapshot restore failed, recomputing from current agent config: ${err.message}`);
           }
         }
         if (metaEntry && Array.isArray(metaEntry.toolNames)) {
           snapshotToolNames = metaEntry.toolNames;  // Case A
+        } else if (metaReadFailed) {
+          // Fallback when meta file exists but is unreadable/corrupt: recompute
+          // the snapshot from current agent config. Safer than silent Case B
+          // (which would re-enable every disabled tool). Cannot perfectly
+          // preserve the historical snapshot, but honors the user's current
+          // disabled-tool intent.
+          const disabled = agent.config?.tools?.disabled || [];
+          snapshotToolNames = computeToolSnapshot(allToolNames, disabled);
         }
-        // else Case B: snapshotToolNames stays null
+        // else Case B (meta absent via ENOENT): snapshotToolNames stays null
       }
     } else {
       // Case C
@@ -666,13 +683,21 @@ After dispatching subagent or other background tasks:
 
     entry.planMode = !!enabled;
     const agent = this._d.getAgent();
-    const customNames = (agent.tools || []).map(t => t.name);
+    const allBuiltInNames = allBuiltInTools.map((t) => t.name);
+
+    // Respect the session's tool snapshot so toggling plan mode preserves the
+    // user's disabled-tool choice. Strip SDK built-in names from the snapshot
+    // because we re-prepend either READ_ONLY_BUILTIN_TOOLS (plan ON) or the
+    // full built-in list (plan OFF). Legacy sessions (Case B) have
+    // toolNames = null and fall back to the unfiltered agent.tools list.
+    const customBase = entry.toolNames != null
+      ? entry.toolNames.filter((n) => !allBuiltInNames.includes(n))
+      : (agent.tools || []).map((t) => t.name).filter(Boolean);
 
     if (entry.planMode) {
-      entry.session.setActiveToolsByName([...READ_ONLY_BUILTIN_TOOLS, ...customNames]);
+      entry.session.setActiveToolsByName([...READ_ONLY_BUILTIN_TOOLS, ...customBase]);
     } else {
-      const allNames = allBuiltInTools.map(t => t.name);
-      entry.session.setActiveToolsByName([...allNames, ...customNames]);
+      entry.session.setActiveToolsByName([...allBuiltInNames, ...customBase]);
     }
 
     this._d.emitEvent({ type: "plan_mode", enabled: entry.planMode }, sp);

@@ -43,8 +43,16 @@ function makeTool(name) {
   return { name, execute: vi.fn() };
 }
 
-const ALL_TOOL_OBJS = [
+// Pi SDK built-in tools — in production these come from
+// createSandboxedTools().tools, NOT from agent.tools. Mirror that structure so
+// tests exercise the real code paths.
+const SDK_BUILTIN_OBJS = [
   "read", "bash", "edit", "write", "grep", "find", "ls",
+].map(makeTool);
+
+// OpenHanako custom tools — in production these come from agent.tools getter
+// and flow through buildTools.customTools.
+const HANAKO_CUSTOM_OBJS = [
   "search_memory", "pin_memory", "unpin_memory", "web_search",
   "web_fetch", "todo_write", "create_artifact", "notify",
   "stage_files", "subagent", "channel", "record_experience",
@@ -53,7 +61,10 @@ const ALL_TOOL_OBJS = [
 ].map(makeTool);
 
 function allNames() {
-  return ALL_TOOL_OBJS.map((t) => t.name);
+  return [
+    ...SDK_BUILTIN_OBJS.map((t) => t.name),
+    ...HANAKO_CUSTOM_OBJS.map((t) => t.name),
+  ];
 }
 
 describe("session-coordinator tool snapshot (createSession)", () => {
@@ -86,7 +97,7 @@ describe("session-coordinator tool snapshot (createSession)", () => {
       id: "test",
       agentDir,
       sessionDir,
-      tools: ALL_TOOL_OBJS,
+      tools: HANAKO_CUSTOM_OBJS,
       get config() { return currentAgentConfig; },
       setMemoryEnabled: vi.fn(),
       buildSystemPrompt: () => "mock-prompt",
@@ -108,8 +119,9 @@ describe("session-coordinator tool snapshot (createSession)", () => {
         getAppendSystemPrompt: () => [],
       }),
       getSkills: () => null,
-      buildTools: () => ({ tools: [], customTools: ALL_TOOL_OBJS }),
+      buildTools: () => ({ tools: SDK_BUILTIN_OBJS, customTools: HANAKO_CUSTOM_OBJS }),
       emitEvent: vi.fn(),
+      emitDevLog: vi.fn(),
       getHomeCwd: () => tmpDir,
       agentIdFromSessionPath: () => "test",
       switchAgentOnly: async () => {},
@@ -145,6 +157,20 @@ describe("session-coordinator tool snapshot (createSession)", () => {
     // Persisted to meta
     const meta = JSON.parse(await fsp.readFile(path.join(sessionDir, "session-meta.json"), "utf-8"));
     expect(meta[path.basename(fakeSessionPath)].toolNames).toEqual(allNames());
+  });
+
+  it("Case C: snapshot includes Pi SDK built-ins (regression for P1 — bundle must carry read/bash/etc)", async () => {
+    currentAgentConfig = { tools: { disabled: ["browser"] } };
+    await coord.createSession(null, tmpDir, true);
+
+    const appliedList = activeToolsSpy.mock.calls[0][0];
+    // All 7 Pi SDK built-ins must be in the active set even though agent.tools
+    // doesn't contain them — they come from sessionTools. Without the P1 fix,
+    // setActiveToolsByName would receive only custom tool names and silently
+    // disable read/bash/edit/write/grep/find/ls for every fresh session.
+    for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
+      expect(appliedList).toContain(name);
+    }
   });
 
   it("Case C: browser disabled is excluded from snapshot", async () => {
@@ -221,5 +247,88 @@ describe("session-coordinator tool snapshot (createSession)", () => {
     expect(activeToolsSpy).not.toHaveBeenCalled();
     const entry = coord._sessions.get(sessionPath);
     expect(entry.toolNames).toBeNull();
+  });
+
+  // ── Meta read-failure fallback (P2) ──────────────────────────
+
+  it("restore with unreadable session-meta.json recomputes from current config (fallback) instead of enabling all tools", async () => {
+    // Write malformed JSON to trigger a parse error (non-ENOENT)
+    await fsp.writeFile(path.join(sessionDir, "session-meta.json"), "{ not valid json ]", "utf-8");
+    currentAgentConfig = { tools: { disabled: ["browser"] } };
+
+    const { sessionPath } = await coord.createSession(null, tmpDir, true, null, { restore: true });
+
+    // Snapshot must have been applied (not silent Case B fallback)
+    expect(activeToolsSpy).toHaveBeenCalledTimes(1);
+    const appliedList = activeToolsSpy.mock.calls[0][0];
+    expect(appliedList).not.toContain("browser"); // current disabled list honored
+    expect(appliedList).toContain("cron");
+    expect(appliedList).toContain("read");
+
+    const entry = coord._sessions.get(sessionPath);
+    expect(entry.toolNames).not.toContain("browser");
+  });
+
+  // ── setPlanMode post-creation (P2) ──────────────────────────
+
+  it("setPlanMode ON after session creation preserves disabled-tool choice via sessionEntry.toolNames", async () => {
+    currentAgentConfig = { tools: { disabled: ["browser"] } };
+    await coord.createSession(null, tmpDir, true);
+    expect(activeToolsSpy).toHaveBeenCalledTimes(1); // initial snapshot apply
+
+    // Now toggle plan mode ON
+    coord.setPlanMode(true, SDK_BUILTIN_OBJS);
+
+    // Second setActiveToolsByName call from plan mode
+    expect(activeToolsSpy).toHaveBeenCalledTimes(2);
+    const planOnList = activeToolsSpy.mock.calls[1][0];
+    // Read-only SDK subset present
+    expect(planOnList).toContain("read");
+    expect(planOnList).toContain("grep");
+    expect(planOnList).toContain("find");
+    expect(planOnList).toContain("ls");
+    // Write-capable SDK tools absent in plan mode
+    expect(planOnList).not.toContain("bash");
+    expect(planOnList).not.toContain("edit");
+    expect(planOnList).not.toContain("write");
+    // Custom tool that was NOT disabled stays available
+    expect(planOnList).toContain("cron");
+    // Custom tool that WAS disabled stays disabled even in plan mode
+    expect(planOnList).not.toContain("browser");
+  });
+
+  it("setPlanMode OFF after plan-on restores the snapshot (not raw agent.tools)", async () => {
+    currentAgentConfig = { tools: { disabled: ["browser"] } };
+    await coord.createSession(null, tmpDir, true);
+    coord.setPlanMode(true, SDK_BUILTIN_OBJS);
+    coord.setPlanMode(false, SDK_BUILTIN_OBJS);
+
+    const planOffList = activeToolsSpy.mock.calls[2][0];
+    // All SDK built-ins back
+    for (const name of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
+      expect(planOffList).toContain(name);
+    }
+    // Customs respecting the snapshot
+    expect(planOffList).toContain("cron");
+    expect(planOffList).not.toContain("browser"); // still disabled per snapshot
+  });
+
+  it("setPlanMode on legacy session (toolNames=null) falls back to raw agent.tools", async () => {
+    // Pre-write meta WITHOUT toolNames
+    await fsp.writeFile(
+      path.join(sessionDir, "session-meta.json"),
+      JSON.stringify({ [path.basename(fakeSessionPath)]: { memoryEnabled: true } }, null, 2),
+    );
+    await coord.createSession(null, tmpDir, true, null, { restore: true });
+    // Case B: no initial snapshot applied
+    expect(activeToolsSpy).not.toHaveBeenCalled();
+
+    coord.setPlanMode(true, SDK_BUILTIN_OBJS);
+
+    // Plan mode still applies read-only SDK + full agent.tools (legacy fallback)
+    const planList = activeToolsSpy.mock.calls[0][0];
+    expect(planList).toContain("read");
+    expect(planList).toContain("browser"); // not disabled — legacy session sees all customs
+    expect(planList).toContain("cron");
   });
 });
