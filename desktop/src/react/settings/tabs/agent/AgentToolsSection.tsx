@@ -63,27 +63,30 @@ export function AgentToolsSection({ availableTools, disabled }: Props) {
       <h2 className={styles["settings-section-title"]}>
         {t("settings.agent.tools.title")}
       </h2>
-      <p className={styles["settings-hint"]}>
+      <p className={styles["settings-desc"]}>
         {t("settings.agent.tools.description")}
       </p>
-      <div className={styles["tool-list"]}>
+      <div className={styles["skills-list-block"]}>
         {renderable.map((name) => {
           const isOn = !disabled.includes(name);
           return (
             <div
-              className={styles["tool-row"]}
+              className={styles["skills-list-item"]}
               key={name}
               data-tool-name={name}
+              style={{ cursor: "default" }}
             >
-              <div className={styles["tool-row-info"]}>
-                <div className={styles["tool-row-label"]}>
+              <div className={styles["skills-list-info"]}>
+                <span className={styles["skills-list-name"]}>
                   {t(`settings.agent.tools.items.${name}.label`)}
-                </div>
-                <div className={styles["tool-row-summary"]}>
+                </span>
+                <span className={styles["skills-list-desc"]}>
                   {t(`settings.agent.tools.items.${name}.summary`)}
-                </div>
+                </span>
               </div>
-              <Toggle on={isOn} onChange={() => toggleTool(name)} />
+              <div className={styles["skills-list-actions"]}>
+                <Toggle on={isOn} onChange={() => toggleTool(name)} />
+              </div>
             </div>
           );
         })}
