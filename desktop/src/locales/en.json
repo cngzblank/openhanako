@@ -1489,8 +1489,8 @@
     },
     "browser": {
       "label": "Browser",
-      "description": "Control a browser to browse the web. Supports navigation, clicking, typing, scrolling, and screenshots.\nActions:\n- start: Launch the browser (must be called before first use)\n- stop: Close the browser\n- navigate(url): Navigate to a URL\n- snapshot: Get the current page's element tree (recommended: text format, low cost)\n- screenshot: Take a screenshot of the current page (use only when visual info is needed)\n- click(ref): Click the element with the [ref] number from snapshot\n- type(text, ref?): Type text into an element, optionally click ref to focus first\n- scroll(direction, amount?): Scroll the page, direction is up/down\n- select(ref, value): Select a dropdown option\n- key(key): Press a key, e.g. Enter, Escape, Tab, Control+a\n- wait(timeout?, state?): Wait for the page to load\n- evaluate(expression): Execute JavaScript on the page\n- show: Bring the browser window to front\n\nImportant: [ref] numbers from snapshot become invalid after page changes. A new snapshot is automatically returned after each navigate/click.",
-      "actionDesc": "Action type",
+      "description": "Control a headless browser (navigate, click, type, scroll, screenshot, evaluate JS). Use the action parameter to pick an operation; see its description for per-action parameters. Element [ref] ids from snapshot become stale after any navigate/click/type — those operations auto-return a fresh snapshot, always use refs from the latest one.",
+      "actionDesc": "Which operation to run. Required params per action: navigate→url; click→ref; type→text (optional ref, pressEnter); scroll→direction (optional amount); select→ref+value; key→key; wait→(optional timeout, state); evaluate→expression. start, stop, snapshot, screenshot, show take no extra params.",
       "urlDesc": "URL (required for navigate)",
       "refDesc": "Element ref number (used for click/type/select)",
       "textDesc": "Input text (required for type)",
