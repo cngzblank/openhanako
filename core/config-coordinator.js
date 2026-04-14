@@ -119,7 +119,11 @@ export class ConfigCoordinator {
       if (partial[field] !== undefined) {
         if (partial[field] !== null && partial[field] !== "") prefs[prefKey] = partial[field];
         else delete prefs[prefKey];
-        changed.push(`${field}=${partial[field] || "(cleared)"}`);
+        const v = partial[field];
+        const repr = !v ? "(cleared)"
+          : typeof v === "object" ? `${v.provider || "?"}/${v.id || "?"}`
+          : String(v);
+        changed.push(`${field}=${repr}`);
       }
     }
     this._savePrefs(prefs);

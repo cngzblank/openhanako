@@ -108,11 +108,20 @@ export class AgentManager {
       await initOne(this._activeAgentId);
     } catch (err) {
       console.error(`[agent-manager] 焦点 agent "${this._activeAgentId}" init 失败: ${err.message}`);
-      // 仍然创建实例放入 map，让应用能启动；agent 自身已降级（记忆不可用等）
+      if (err.stack) console.error(err.stack);
+      // 仍然创建实例放入 map，让应用能启动。
+      // 关键：必须至少把 config 加载进来，否则 agent.config.models.chat 读不到，
+      // 下游会误判为"没配模型"，触发 session 创建跳过 / 记忆系统未启动等连锁崩溃（#414）。
       if (!this._agents.has(this._activeAgentId)) {
         const agentDir = path.join(this._d.agentsDir, this._activeAgentId);
         const ag = this._createAgentInstance(agentDir, () => ({}));
         ag.setGetOwnerIds(this._makeOwnerIdsFn(ag));
+        try {
+          ag.loadConfigOnly();
+        } catch (cfgErr) {
+          console.error(`[agent-manager] fallback loadConfigOnly 也失败: ${cfgErr.message}`);
+          if (cfgErr.stack) console.error(cfgErr.stack);
+        }
         this._agents.set(this._activeAgentId, ag);
       }
     }

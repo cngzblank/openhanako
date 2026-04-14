@@ -112,6 +112,20 @@ export class Agent {
    * @param {object} [sharedModels] - 全局共享模型配置（由 engine 传入）
    * @param {(bareId: string, agentConfig: object) => object} [resolveModel] - 统一模型解析回调
    */
+  /**
+   * 仅加载 config + 身份字段，不碰 FactStore/memoryTicker/tools/runCompatChecks。
+   * 供 init() 失败时的 fallback 使用，保证即使完整初始化失败，
+   * agent.config.models.chat 仍能被下游正确读取（模型解析 / session 创建）。
+   * 抛错表示 config.yaml 本身读不出来（文件缺失或格式损坏）。
+   */
+  loadConfigOnly() {
+    this._config = loadConfig(this.configPath);
+    const isZh = String(this._config.locale || "").startsWith("zh");
+    this.userName = this._config.user?.name || (isZh ? "用户" : "User");
+    this.agentName = this._config.agent?.name || "Hanako";
+    this._memoryMasterEnabled = this._config.memory?.enabled !== false;
+  }
+
   async init(log = () => {}, sharedModels = {}, resolveModel = null) {
     // 0. 兼容性检查（目录、数据库、配置文件）
     await runCompatChecks({
