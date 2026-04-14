@@ -9,6 +9,10 @@ import { t } from "../i18n.js";
 import { extractBlocks } from "../block-extractors.js";
 import { BrowserManager } from "../../lib/browser/browser-manager.js";
 import {
+  materializeExecutorIdentity,
+  readSubagentSessionMetaSync,
+} from "../../lib/subagent-executor-metadata.js";
+import {
   extractTextContent,
   loadSessionHistoryMessages,
   isValidSessionPath,
@@ -17,6 +21,63 @@ import { loadLatestTodosFromSessionFile } from "../../lib/tools/todo-compat.js";
 
 export function createSessionsRoute(engine) {
   const route = new Hono();
+
+  function applySubagentIdentity(block, task = null) {
+    const sessionPath = block.streamKey || task?.meta?.sessionPath || null;
+    const sessionMeta = sessionPath ? readSubagentSessionMetaSync(sessionPath) : null;
+    const resolved =
+      materializeExecutorIdentity(sessionMeta, engine.getAgent?.bind(engine))
+      || materializeExecutorIdentity(task?.meta, engine.getAgent?.bind(engine))
+      || materializeExecutorIdentity(block, engine.getAgent?.bind(engine));
+
+    if (resolved) {
+      block.agentId = resolved.agentId;
+      block.agentName = resolved.agentName;
+      return;
+    }
+
+    const inferredAgentId = sessionPath
+      ? engine.agentIdFromSessionPath?.(sessionPath) || null
+      : null;
+    if (!inferredAgentId) return;
+
+    const inferredAgent = engine.getAgent?.(inferredAgentId) || null;
+    block.agentId = inferredAgentId;
+    block.agentName = inferredAgent?.agentName || "Unknown agent";
+  }
+
+  function patchBlockExecutorMetadata(block, task = null) {
+    const sessionPath = block.streamKey || task?.meta?.sessionPath || null;
+    const sessionMeta = sessionPath ? readSubagentSessionMetaSync(sessionPath) : null;
+    const sources = [sessionMeta, task?.meta, block];
+
+    for (const source of sources) {
+      if (!source) continue;
+      if (source.executorAgentId && !block.executorAgentId) {
+        block.executorAgentId = source.executorAgentId;
+      }
+      if (source.executorAgentNameSnapshot && !block.executorAgentNameSnapshot) {
+        block.executorAgentNameSnapshot = source.executorAgentNameSnapshot;
+      }
+      if (source.executorMetaVersion && !block.executorMetaVersion) {
+        block.executorMetaVersion = source.executorMetaVersion;
+      }
+    }
+  }
+
+  function patchBlockRequestedMetadata(block, task = null) {
+    const sources = [task?.meta, block];
+
+    for (const source of sources) {
+      if (!source) continue;
+      if (source.requestedAgentId && !block.requestedAgentId) {
+        block.requestedAgentId = source.requestedAgentId;
+      }
+      if (source.requestedAgentNameSnapshot && !block.requestedAgentName) {
+        block.requestedAgentName = source.requestedAgentNameSnapshot;
+      }
+    }
+  }
 
   // 列出所有 agent 的历史 session
   route.get("/sessions", async (c) => {
@@ -110,32 +171,39 @@ export function createSessionsRoute(engine) {
         const deferredStore = engine.deferredResults;
         for (const b of slicedBlocks) {
           if (b.type !== "subagent" || !b.taskId) continue;
+          const task = deferredStore?.query?.(b.taskId) || null;
+          const deferredSessionPath = task?.meta?.sessionPath || null;
+          if (!b.streamKey && deferredSessionPath) b.streamKey = deferredSessionPath;
+          patchBlockRequestedMetadata(b, task);
+          patchBlockExecutorMetadata(b, task);
+          applySubagentIdentity(b, task);
+
           if (b.streamStatus !== "running") continue;
 
           // 优先查 deferred store 的持久化终态（aborted / failed）
           if (deferredStore) {
-            const task = deferredStore.query(b.taskId);
             if (task?.status === "aborted") {
               b.streamStatus = "aborted";
               b.summary = task.reason || "aborted";
               if (task.meta?.sessionPath) b.streamKey = task.meta.sessionPath;
+              patchBlockRequestedMetadata(b, task);
+              patchBlockExecutorMetadata(b, task);
+              applySubagentIdentity(b, task);
               continue;
             }
             if (task?.status === "failed") {
               b.streamStatus = "failed";
               b.summary = task.reason || "failed";
               if (task.meta?.sessionPath) b.streamKey = task.meta.sessionPath;
+              patchBlockRequestedMetadata(b, task);
+              patchBlockExecutorMetadata(b, task);
+              applySubagentIdentity(b, task);
               continue;
             }
           }
 
           // 从 session 文件推断 done 状态
           let sp = b.streamKey || null;
-          if (!sp && deferredStore) {
-            const task = deferredStore.query(b.taskId);
-            sp = task?.meta?.sessionPath || null;
-            if (sp) b.streamKey = sp;
-          }
           if (!sp) continue;
           try {
             if (!fsSync.existsSync(sp)) continue;

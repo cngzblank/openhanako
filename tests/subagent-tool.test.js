@@ -43,6 +43,7 @@ function makeDeps(overrides = {}) {
     currentAgentId: "hana",
     agentDir: "/test/agents/hana",
     emitEvent: vi.fn(),
+    persistSubagentSessionMeta: vi.fn(async () => {}),
     ...overrides,
   };
 }
@@ -70,6 +71,13 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
     expect(result.details.streamStatus).toBe("running");
     expect(result.details.sessionPath).toBeNull();
     expect(result.details.task).toBe("查一下项目状态");
+    expect(result.details.agentId).toBe("hana");
+    expect(result.details.agentName).toBe("Hana");
+    expect(result.details.requestedAgentId).toBe("hana");
+    expect(result.details.requestedAgentNameSnapshot).toBe("Hana");
+    expect(result.details.executorAgentId).toBe("hana");
+    expect(result.details.executorAgentNameSnapshot).toBe("Hana");
+    expect(result.details.executorMetaVersion).toBe(1);
 
     // store.defer is called before returning
     expect(mockStore.defer).toHaveBeenCalledWith(
@@ -77,6 +85,49 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       "/test/session.jsonl",
       expect.objectContaining({ type: "subagent" }),
     );
+  });
+
+  it("self-dispatch emits actual agent identity with session-ready patch", async () => {
+    const emitEvent = vi.fn();
+    const persistSubagentSessionMeta = vi.fn(async () => {});
+    const tool = createSubagentTool(makeDeps({
+      getDeferredStore: () => mockStore,
+      emitEvent,
+      persistSubagentSessionMeta,
+    }));
+
+    const result = await tool.execute("call_1", { task: "当前 agent 自己执行" }, null, null, mockCtx());
+    const { taskId } = result.details;
+
+    await vi.waitFor(() => {
+      expect(emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "block_update",
+          taskId,
+          patch: expect.objectContaining({
+            streamKey: "/test/child.jsonl",
+            agentId: "hana",
+            agentName: "Hana",
+            requestedAgentId: "hana",
+            requestedAgentNameSnapshot: "Hana",
+            executorAgentId: "hana",
+            executorAgentNameSnapshot: "Hana",
+          }),
+        }),
+        "/test/session.jsonl",
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(persistSubagentSessionMeta).toHaveBeenCalledWith(
+        "/test/child.jsonl",
+        expect.objectContaining({
+          executorAgentId: "hana",
+          executorAgentNameSnapshot: "Hana",
+          executorMetaVersion: 1,
+        }),
+      );
+    });
   });
 
   // 2. deferred store resolves on success
@@ -113,6 +164,43 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
       );
     });
     expect(mockStore.resolve).not.toHaveBeenCalled();
+  });
+
+  it("does not silently fallback to current agent when delegated execution fails", async () => {
+    const executeIsolated = vi.fn().mockRejectedValue(new Error("delegated boom"));
+    const emitEvent = vi.fn();
+    const tool = createSubagentTool(makeDeps({
+      executeIsolated,
+      getDeferredStore: () => mockStore,
+      emitEvent,
+      listAgents: vi.fn(() => [
+        { id: "hana", name: "Hana" },
+        { id: "butter", name: "butter" },
+      ]),
+    }));
+
+    const result = await tool.execute("call_1", { task: "委派任务", agent: "butter" }, null, null, mockCtx());
+
+    expect(result.details.requestedAgentId).toBe("butter");
+    expect(result.details.executorAgentId).toBe("butter");
+    await vi.waitFor(() => {
+      expect(mockStore.fail).toHaveBeenCalledWith(
+        expect.stringMatching(/^subagent-/),
+        "delegated boom",
+      );
+    });
+    expect(executeIsolated).toHaveBeenCalledTimes(1);
+    expect(executeIsolated).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ agentId: "butter" }),
+    );
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "block_update",
+        patch: expect.objectContaining({ streamStatus: "failed", summary: "delegated boom" }),
+      }),
+      "/test/session.jsonl",
+    );
   });
 
   // 4. emits block_update with streamStatus: done on success

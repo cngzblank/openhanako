@@ -18,6 +18,7 @@ import { createActivitySlice, type ActivitySlice } from './activity-slice';
 import { createBridgeSlice, type BridgeSlice } from './bridge-slice';
 import { createPluginUiSlice, type PluginUiSlice } from './plugin-ui-slice';
 import { createSelectionSlice, type SelectionSlice } from './selection-slice';
+import { createSubagentPreviewSlice, type SubagentPreviewSlice } from './subagent-preview-slice';
 
 export type StoreState = ConnectionSlice &
   SessionSlice &
@@ -37,7 +38,8 @@ export type StoreState = ConnectionSlice &
   ActivitySlice &
   BridgeSlice &
   PluginUiSlice &
-  SelectionSlice;
+  SelectionSlice &
+  SubagentPreviewSlice;
 
 export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createConnectionSlice(set),
@@ -59,6 +61,7 @@ export const useStore = create<StoreState>()((set, _get, _api) => ({
   ...createBridgeSlice(set),
   ...createPluginUiSlice(set),
   ...createSelectionSlice(set),
+  ...createSubagentPreviewSlice(set),
 }));
 
 // Re-export slice types
@@ -82,4 +85,5 @@ export type {
   BridgeSlice,
   PluginUiSlice,
   SelectionSlice,
+  SubagentPreviewSlice,
 };

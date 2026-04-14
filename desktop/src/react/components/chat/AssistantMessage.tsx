@@ -28,9 +28,10 @@ interface Props {
   showAvatar: boolean;
   sessionPath: string;
   agentId?: string | null;
+  readOnly?: boolean;
 }
 
-export const AssistantMessage = memo(function AssistantMessage({ message, showAvatar, sessionPath, agentId }: Props) {
+export const AssistantMessage = memo(function AssistantMessage({ message, showAvatar, sessionPath, agentId, readOnly = false }: Props) {
   const agents = useStore(s => s.agents);
   const globalAgentName = useStore(s => s.agentName) || 'Hanako';
   const globalYuan = useStore(s => s.agentYuan) || 'hanako';
@@ -142,14 +143,16 @@ export const AssistantMessage = memo(function AssistantMessage({ message, showAv
           <ContentBlockView key={`block-${i}`} block={block} agentName={displayName} yuan={displayYuan} />
         ))}
       </div>
-      <MessageActions
-        messageId={message.id}
-        sessionPath={sessionPath}
-        onCopy={handleCopy}
-        onScreenshot={handleScreenshot}
-        copied={copied}
-        isStreaming={isStreaming}
-      />
+      {!readOnly && (
+        <MessageActions
+          messageId={message.id}
+          sessionPath={sessionPath}
+          onCopy={handleCopy}
+          onScreenshot={handleScreenshot}
+          copied={copied}
+          isStreaming={isStreaming}
+        />
+      )}
     </div>
   );
 });

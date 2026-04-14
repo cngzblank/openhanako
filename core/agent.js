@@ -29,6 +29,7 @@ import { createInstallSkillTool } from "../lib/tools/install-skill.js";
 import { createNotifyTool } from "../lib/tools/notify-tool.js";
 import { createUpdateSettingsTool } from "../lib/tools/update-settings-tool.js";
 import { createSubagentTool } from "../lib/tools/subagent-tool.js";
+import { writeSubagentSessionMeta } from "../lib/subagent-executor-metadata.js";
 import { createCheckDeferredTool } from "../lib/tools/check-deferred-tool.js";
 import { createWaitTool } from "../lib/tools/wait-tool.js";
 import { createStopTaskTool } from "../lib/tools/stop-task-tool.js";
@@ -402,6 +403,7 @@ export class Agent {
       currentAgentId: this.channelsDir && this.agentsDir ? path.basename(this.agentDir) : undefined,
       agentDir: this.agentDir,
       emitEvent: (event, sp) => this._cb?.emitEvent?.(event, sp),
+      persistSubagentSessionMeta: (sessionPath, meta) => writeSubagentSessionMeta(sessionPath, meta),
     });
 
     // 12. 组装 system prompt

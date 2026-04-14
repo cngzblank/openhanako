@@ -243,7 +243,35 @@ describe('update_settings', () => {
 describe('subagent', () => {
   it("subagent: 正常", () => {
     const blocks = extractBlocks("subagent", { taskId: "t1", task: "do stuff", agentId: "hana", agentName: "Hana", sessionPath: "/s/t.jsonl", streamStatus: "running" });
-    expect(blocks[0]).toMatchObject({ type: "subagent", taskId: "t1", streamKey: "/s/t.jsonl", streamStatus: "running" });
+    expect(blocks[0]).toMatchObject({
+      type: "subagent",
+      taskId: "t1",
+      requestedAgentId: "hana",
+      requestedAgentName: "Hana",
+      streamKey: "/s/t.jsonl",
+      streamStatus: "running",
+    });
+  });
+
+  it("subagent: 优先读取显式 executor metadata", () => {
+    const blocks = extractBlocks("subagent", {
+      taskId: "t1",
+      task: "do stuff",
+      agentId: "hana",
+      agentName: "Hana",
+      executorAgentId: "butter",
+      executorAgentNameSnapshot: "butter",
+      sessionPath: "/s/t.jsonl",
+      streamStatus: "running",
+    });
+    expect(blocks[0]).toMatchObject({
+      type: "subagent",
+      taskId: "t1",
+      agentId: "butter",
+      agentName: "butter",
+      streamKey: "/s/t.jsonl",
+      streamStatus: "running",
+    });
   });
 
   it("subagent: done 状态", () => {

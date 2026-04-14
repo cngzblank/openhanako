@@ -17,9 +17,11 @@ interface Props {
   message: ChatMessage;
   showAvatar: boolean;
   sessionPath: string;
+  readOnly?: boolean;
+  hideIdentity?: boolean;
 }
 
-export const UserMessage = memo(function UserMessage({ message, showAvatar, sessionPath }: Props) {
+export const UserMessage = memo(function UserMessage({ message, showAvatar, sessionPath, readOnly = false, hideIdentity = false }: Props) {
   const userAvatarUrl = useStore(s => s.userAvatarUrl);
   const t = window.t ?? ((p: string) => p);
   const userName = useStore(s => s.userName) || t('common.me');
@@ -81,7 +83,7 @@ export const UserMessage = memo(function UserMessage({ message, showAvatar, sess
   return (
     <div className={`${styles.messageGroup} ${styles.messageGroupUser}${isSelected ? ` ${styles.messageGroupSelected}` : ''}`}
          data-message-id={message.id}>
-      {showAvatar && (
+      {showAvatar && !hideIdentity && (
         <div className={`${styles.avatarRow} ${styles.avatarRowUser}`}>
           <span className={styles.avatarName}>{userName}</span>
           {userAvatarUrl && !avatarFailed ? (
@@ -121,15 +123,17 @@ export const UserMessage = memo(function UserMessage({ message, showAvatar, sess
         ))}
         {message.textHtml && <MarkdownContent html={message.textHtml} />}
       </div>
-      <MessageActions
-        messageId={message.id}
-        sessionPath={sessionPath}
-        align="left"
-        onCopy={handleCopy}
-        onScreenshot={handleScreenshot}
-        copied={copied}
-        isStreaming={isStreaming}
-      />
+      {!readOnly && (
+        <MessageActions
+          messageId={message.id}
+          sessionPath={sessionPath}
+          align="left"
+          onCopy={handleCopy}
+          onScreenshot={handleScreenshot}
+          copied={copied}
+          isStreaming={isStreaming}
+        />
+      )}
     </div>
   );
 });

@@ -47,6 +47,25 @@ function readAgentConfig(agentsDir, agentId) {
   return YAML.load(fs.readFileSync(path.join(agentsDir, agentId, "config.yaml"), "utf-8"));
 }
 
+function writeSessionJsonl(filePath, messages) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const lines = messages.map((message, index) => JSON.stringify({
+    type: "message",
+    id: `m-${index + 1}`,
+    timestamp: "2026-04-15T00:00:00.000Z",
+    message,
+  }));
+  fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
+}
+
+function readSessionJsonl(filePath) {
+  return fs.readFileSync(filePath, "utf-8")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
 // ── runner 行为 ──────────────────────────────────────────────────────────────
 
 describe("runMigrations runner", () => {
@@ -472,7 +491,7 @@ describe("migration #3 — migrateWorkspaceToPerAgent", () => {
 
     const p = prefs.getPreferences();
     expect(p.home_folder).toBeUndefined();
-    expect(p._dataVersion).toBe(3);
+    expect(p._dataVersion).toBe(4);
   });
 
   it("skips when home_folder is empty", () => {
@@ -484,7 +503,7 @@ describe("migration #3 — migrateWorkspaceToPerAgent", () => {
 
     const config = readAgentConfig(agentsDir, "hana");
     expect(config.desk).toBeUndefined();
-    expect(prefs.getPreferences()._dataVersion).toBe(3);
+    expect(prefs.getPreferences()._dataVersion).toBe(4);
   });
 
   it("falls back to first agent when primaryAgent not found", () => {
@@ -549,7 +568,7 @@ describe("migration #3 — migrateWorkspaceToPerAgent", () => {
     });
 
     runMigration3(prefs);
-    expect(prefs.getPreferences()._dataVersion).toBe(3);
+    expect(prefs.getPreferences()._dataVersion).toBe(4);
 
     // Manually reset _dataVersion to 2 to simulate forced rerun
     const p2 = prefs.getPreferences();
@@ -558,7 +577,7 @@ describe("migration #3 — migrateWorkspaceToPerAgent", () => {
     runMigration3(prefs);
 
     // home_folder is gone from prefs, so migration skips cleanly
-    expect(prefs.getPreferences()._dataVersion).toBe(3);
+    expect(prefs.getPreferences()._dataVersion).toBe(4);
     const config = readAgentConfig(agentsDir, "hana");
     expect(config.desk.home_folder).toBe("/workspace");
   });
@@ -626,5 +645,112 @@ describe("migration #3 — migrateWorkspaceToPerAgent", () => {
     // User explicitly set heartbeat_enabled=true → migration respects it
     const assistantConfig = readAgentConfig(agentsDir, "assistant");
     expect(assistantConfig.desk.heartbeat_enabled).toBe(true);
+  });
+});
+
+describe("migration #4 — migrateSubagentExecutorMetadata", () => {
+  let tmpDir, userDir, agentsDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    userDir = path.join(tmpDir, "user");
+    agentsDir = path.join(tmpDir, "agents");
+    fs.mkdirSync(userDir, { recursive: true });
+    fs.mkdirSync(agentsDir, { recursive: true });
+  });
+
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  function runMigration4(prefs) {
+    const p = prefs.getPreferences();
+    p._dataVersion = 3;
+    prefs.savePreferences(p);
+    runMigrations({
+      hanakoHome: tmpDir,
+      agentsDir,
+      prefs,
+      providerRegistry: makeRegistry([]),
+      log: () => {},
+    });
+  }
+
+  it("migrates explicit delegated executor metadata into parent session history and child sidecar", () => {
+    writeAgentConfig(agentsDir, "hanako", { agent: { name: "Hanako" }, api: { provider: "" } });
+    writeAgentConfig(agentsDir, "butter", { agent: { name: "butter" }, api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    const parentSessionPath = path.join(agentsDir, "hanako", "sessions", "parent.jsonl");
+    const childSessionPath = path.join(agentsDir, "hanako", "subagent-sessions", "child.jsonl");
+
+    writeSessionJsonl(parentSessionPath, [
+      { role: "assistant", content: "parent says hi" },
+      {
+        role: "toolResult",
+        toolName: "subagent",
+        details: {
+          taskId: "subagent-1",
+          task: "delegate to butter",
+          agentId: "butter",
+          agentName: "butter",
+          sessionPath: childSessionPath,
+          streamStatus: "done",
+        },
+      },
+    ]);
+    fs.mkdirSync(path.dirname(childSessionPath), { recursive: true });
+    fs.writeFileSync(childSessionPath, "", "utf-8");
+
+    runMigration4(prefs);
+
+    const entries = readSessionJsonl(parentSessionPath);
+    const details = entries[1].message.details;
+    expect(details.executorAgentId).toBe("butter");
+    expect(details.executorAgentNameSnapshot).toBe("butter");
+    expect(details.executorMetaVersion).toBe(1);
+
+    const sidecar = JSON.parse(fs.readFileSync(path.join(path.dirname(childSessionPath), "session-meta.json"), "utf-8"));
+    expect(sidecar["child.jsonl"]).toMatchObject({
+      executorAgentId: "butter",
+      executorAgentNameSnapshot: "butter",
+      executorMetaVersion: 1,
+    });
+  });
+
+  it("backfills legacy self-dispatch records from the owning agent directory when executor metadata is missing", () => {
+    writeAgentConfig(agentsDir, "hanako", { agent: { name: "Hanako" }, api: { provider: "" } });
+    const prefs = makePrefs(userDir);
+    const parentSessionPath = path.join(agentsDir, "hanako", "sessions", "parent.jsonl");
+    const childSessionPath = path.join(agentsDir, "hanako", "subagent-sessions", "child.jsonl");
+
+    writeSessionJsonl(parentSessionPath, [
+      { role: "assistant", content: "parent says hi" },
+      {
+        role: "toolResult",
+        toolName: "subagent",
+        details: {
+          taskId: "subagent-1",
+          task: "self-dispatch legacy task",
+          sessionPath: childSessionPath,
+          streamStatus: "done",
+        },
+      },
+    ]);
+    fs.mkdirSync(path.dirname(childSessionPath), { recursive: true });
+    fs.writeFileSync(childSessionPath, "", "utf-8");
+
+    runMigration4(prefs);
+
+    const entries = readSessionJsonl(parentSessionPath);
+    const details = entries[1].message.details;
+    expect(details.executorAgentId).toBe("hanako");
+    expect(details.executorAgentNameSnapshot).toBe("Hanako");
+    expect(details.agentId).toBe("hanako");
+    expect(details.agentName).toBe("Hanako");
+
+    const sidecar = JSON.parse(fs.readFileSync(path.join(path.dirname(childSessionPath), "session-meta.json"), "utf-8"));
+    expect(sidecar["child.jsonl"]).toMatchObject({
+      executorAgentId: "hanako",
+      executorAgentNameSnapshot: "Hanako",
+      executorMetaVersion: 1,
+    });
   });
 });

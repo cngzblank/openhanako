@@ -12,6 +12,12 @@ import path from "path";
 import YAML from "js-yaml";
 import { safeReadYAMLSync } from "../shared/safe-fs.js";
 import { saveConfig } from "../lib/memory/config-loader.js";
+import {
+  getSubagentSessionMetaPath,
+  mergeExecutorMetadata,
+  normalizeExecutorMetadata,
+  readSubagentSessionMetaSync,
+} from "../lib/subagent-executor-metadata.js";
 
 // ── 迁移表 ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +28,8 @@ const migrations = {
   2: migrateBridgeToPerAgent,
   // workspace (home_folder) 从全局 preferences 迁移到主 agent config.yaml
   3: migrateWorkspaceToPerAgent,
+  // subagent executor metadata 显式化，避免历史回放依赖目录推断
+  4: migrateSubagentExecutorMetadata,
 };
 
 // ── Runner ──────────────────────────────────────────────────────────────────
@@ -262,6 +270,193 @@ function migrateBridgeToPerAgent(ctx) {
   delete preferences.bridge;
   prefs.savePreferences(preferences);
   log(`[migrations] deleted prefs.bridge`);
+}
+
+function migrateSubagentExecutorMetadata(ctx) {
+  const { agentsDir, hanakoHome, log } = ctx;
+  const agentSnapshots = new Map();
+  const childSessionCandidates = new Map();
+
+  const agentDirs = (() => {
+    try {
+      return fs.readdirSync(agentsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(agentsDir, d.name, "config.yaml")));
+    } catch {
+      return [];
+    }
+  })();
+
+  for (const dir of agentDirs) {
+    const cfgPath = path.join(agentsDir, dir.name, "config.yaml");
+    const cfg = safeReadYAMLSync(cfgPath, {}, YAML);
+    agentSnapshots.set(dir.name, cfg?.agent?.name || dir.name);
+  }
+
+  function ownerIdentityFor(agentId) {
+    if (!agentId) return null;
+    return normalizeExecutorMetadata({
+      agentId,
+      agentName: agentSnapshots.get(agentId) || agentId,
+    });
+  }
+
+  function rememberChildSessionIdentity(sessionPath, identity, priority) {
+    if (!sessionPath || !identity) return;
+    const current = childSessionCandidates.get(sessionPath);
+    if (!current || priority > current.priority) {
+      childSessionCandidates.set(sessionPath, { identity, priority });
+    }
+  }
+
+  function inferOwnerAgentId(sessionPath) {
+    const rel = path.relative(agentsDir, sessionPath);
+    if (rel.startsWith("..")) return null;
+    return rel.split(path.sep)[0] || null;
+  }
+
+  for (const dir of agentDirs) {
+    const agentId = dir.name;
+    const sessionDir = path.join(agentsDir, agentId, "sessions");
+    let sessionFiles = [];
+    try {
+      sessionFiles = fs.readdirSync(sessionDir)
+        .filter((name) => name.endsWith(".jsonl"))
+        .map((name) => path.join(sessionDir, name));
+    } catch {
+      sessionFiles = [];
+    }
+
+    for (const sessionFile of sessionFiles) {
+      let changed = false;
+      const outputLines = [];
+      let raw = "";
+      try {
+        raw = fs.readFileSync(sessionFile, "utf-8");
+      } catch {
+        continue;
+      }
+
+      for (const line of raw.split("\n")) {
+        if (!line.trim()) continue;
+
+        let entry;
+        try {
+          entry = JSON.parse(line);
+        } catch {
+          outputLines.push(line);
+          continue;
+        }
+
+        const msg = entry?.message;
+        if (entry?.type !== "message" || msg?.role !== "toolResult" || msg?.toolName !== "subagent" || !msg?.details) {
+          outputLines.push(JSON.stringify(entry));
+          continue;
+        }
+
+        const details = msg.details;
+        const explicitIdentity = normalizeExecutorMetadata(details);
+        const childSessionPath = details.sessionPath || null;
+        const ownerIdentity = ownerIdentityFor(agentId);
+        const inferredOwnerIdentity = childSessionPath
+          ? ownerIdentityFor(inferOwnerAgentId(childSessionPath))
+          : null;
+        const identity = explicitIdentity || ownerIdentity || inferredOwnerIdentity;
+
+        if (identity) {
+          const before = JSON.stringify(details);
+          mergeExecutorMetadata(details, identity);
+          if (JSON.stringify(details) !== before) changed = true;
+          if (childSessionPath) {
+            rememberChildSessionIdentity(childSessionPath, identity, explicitIdentity ? 2 : 1);
+          }
+        }
+
+        outputLines.push(JSON.stringify(entry));
+      }
+
+      if (changed) {
+        fs.writeFileSync(sessionFile, outputLines.join("\n") + "\n", "utf-8");
+        log(`[migrations] subagent executor metadata patched: ${sessionFile}`);
+      }
+    }
+  }
+
+  for (const dir of agentDirs) {
+    const agentId = dir.name;
+    const subagentDir = path.join(agentsDir, agentId, "subagent-sessions");
+    let childFiles = [];
+    try {
+      childFiles = fs.readdirSync(subagentDir)
+        .filter((name) => name.endsWith(".jsonl"))
+        .map((name) => path.join(subagentDir, name));
+    } catch {
+      childFiles = [];
+    }
+
+    for (const childFile of childFiles) {
+      if (!childSessionCandidates.has(childFile)) {
+        const sessionMeta = readSubagentSessionMetaSync(childFile);
+        const identity = sessionMeta || ownerIdentityFor(agentId);
+        rememberChildSessionIdentity(childFile, identity, sessionMeta ? 3 : 0);
+      }
+    }
+  }
+
+  const sidecarWrites = new Map();
+  for (const [childSessionPath, { identity }] of childSessionCandidates) {
+    if (!identity) continue;
+    const metaPath = getSubagentSessionMetaPath(childSessionPath);
+    if (!metaPath) continue;
+    let meta = sidecarWrites.get(metaPath);
+    if (!meta) {
+      try {
+        meta = fs.existsSync(metaPath)
+          ? JSON.parse(fs.readFileSync(metaPath, "utf-8"))
+          : {};
+      } catch {
+        meta = {};
+      }
+      sidecarWrites.set(metaPath, meta);
+    }
+
+    const sessKey = path.basename(childSessionPath);
+    meta[sessKey] = {
+      ...meta[sessKey],
+      ...identity,
+    };
+  }
+
+  for (const [metaPath, meta] of sidecarWrites) {
+    fs.mkdirSync(path.dirname(metaPath), { recursive: true });
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n", "utf-8");
+    log(`[migrations] subagent session sidecar patched: ${metaPath}`);
+  }
+
+  const deferredTasksPath = path.join(hanakoHome, ".ephemeral", "deferred-tasks.json");
+  try {
+    if (!fs.existsSync(deferredTasksPath)) return;
+    const deferredTasks = JSON.parse(fs.readFileSync(deferredTasksPath, "utf-8"));
+    let changed = false;
+    for (const task of Object.values(deferredTasks)) {
+      if (task?.meta?.type !== "subagent") continue;
+      const sessionPath = task.meta.sessionPath || null;
+      const candidate =
+        normalizeExecutorMetadata(task.meta)
+        || (sessionPath ? childSessionCandidates.get(sessionPath)?.identity || readSubagentSessionMetaSync(sessionPath) : null)
+        || (sessionPath ? ownerIdentityFor(inferOwnerAgentId(sessionPath)) : null);
+      if (!candidate) continue;
+      const before = JSON.stringify(task.meta);
+      mergeExecutorMetadata(task.meta, candidate);
+      if (JSON.stringify(task.meta) !== before) changed = true;
+    }
+    if (changed) {
+      fs.mkdirSync(path.dirname(deferredTasksPath), { recursive: true });
+      fs.writeFileSync(deferredTasksPath, JSON.stringify(deferredTasks, null, 2) + "\n", "utf-8");
+      log(`[migrations] subagent deferred metadata patched: ${deferredTasksPath}`);
+    }
+  } catch (err) {
+    log(`[migrations] deferred task patch skipped: ${err.message}`);
+  }
 }
 
 /**

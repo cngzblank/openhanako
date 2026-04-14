@@ -10,9 +10,8 @@ import { useStore } from '../../stores';
 import { loadMoreMessages } from '../../stores/session-actions';
 
 const EMPTY_ITEMS: ChatListItem[] = [];
-import { UserMessage } from './UserMessage';
-import { AssistantMessage } from './AssistantMessage';
 import type { ChatListItem } from '../../stores/chat-types';
+import { ChatTranscript } from './ChatTranscript';
 import styles from './Chat.module.css';
 
 const MAX_ALIVE = 5;
@@ -185,15 +184,7 @@ const Panel = memo(function Panel({ path, active }: { path: string; active: bool
             {loadingMore ? '...' : ''}
           </div>
         )}
-        {items.map((item, i) => (
-          <ItemView
-            key={item.type === 'message' ? item.data.id : `c-${i}`}
-            item={item}
-            prevItem={i > 0 ? items[i - 1] : undefined}
-            sessionPath={path}
-            agentId={sessionAgentId}
-          />
-        ))}
+        <ChatTranscript items={items} sessionPath={path} agentId={sessionAgentId} />
         {isSessionStreaming && (
           <div className={styles.typingIndicator}>
             <span /><span /><span />
@@ -228,21 +219,3 @@ function ScrollToBottomBtn() {
     </button>
   );
 }
-
-// ── ItemView ──
-
-const ItemView = memo(function ItemView({ item, prevItem, sessionPath, agentId }: {
-  item: ChatListItem;
-  prevItem?: ChatListItem;
-  sessionPath: string;
-  agentId?: string | null;
-}) {
-  if (item.type === 'compaction') return null;
-  const msg = item.data;
-  const prevRole = prevItem?.type === 'message' ? prevItem.data.role : null;
-  const showAvatar = msg.role !== prevRole;
-  if (msg.role === 'user') {
-    return <UserMessage message={msg} showAvatar={showAvatar} sessionPath={sessionPath} />;
-  }
-  return <AssistantMessage message={msg} showAvatar={showAvatar} sessionPath={sessionPath} agentId={agentId} />;
-});

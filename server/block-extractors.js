@@ -7,6 +7,8 @@
  * toolResult 消息没有 .toolCall 属性。
  */
 
+import { materializeExecutorIdentity } from "../lib/subagent-executor-metadata.js";
+
 export const BLOCK_EXTRACTORS = {
   // COMPAT(v0.98): present_files 是 stage_files 的旧名，共用 extractor。v0.98 后可删
   stage_files: (details) => {
@@ -70,12 +72,19 @@ export const BLOCK_EXTRACTORS = {
 
   subagent: (details) => {
     if (!details.taskId) return null;
+    const executor = materializeExecutorIdentity(details);
+    const requestedAgentId = details.requestedAgentId || details.agentId || null;
+    const requestedAgentName = details.requestedAgentNameSnapshot || details.agentName || requestedAgentId || null;
     return [{
       type: "subagent",
       taskId: details.taskId,
       task: details.task || "",
-      agentId: details.agentId || null,
-      agentName: details.agentName || null,
+      agentId: executor?.agentId || null,
+      agentName: executor?.agentName || null,
+      requestedAgentId,
+      requestedAgentName,
+      executorAgentId: details.executorAgentId || executor?.agentId || null,
+      executorAgentNameSnapshot: details.executorAgentNameSnapshot || executor?.agentName || null,
       streamKey: details.sessionPath || "",
       streamStatus: details.streamStatus || "running",
       summary: details.summary || null,
