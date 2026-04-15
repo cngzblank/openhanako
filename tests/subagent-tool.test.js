@@ -62,7 +62,8 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
   // 1. fire-and-forget: returns immediately with taskId / streamStatus / sessionPath
   it("dispatches task and returns immediately with running status", async () => {
     const tool = createSubagentTool(deps);
-    const result = await tool.execute("call_1", { task: "查一下项目状态" }, null, null, mockCtx());
+    const task = "任务：查一下项目状态\n\n请阅读当前仓库的未提交改动，并总结风险。";
+    const result = await tool.execute("call_1", { task }, null, null, mockCtx());
 
     // t() returns the key path when locale is not loaded in tests
     expect(result.content[0].text).toMatch(/task-id|subagentDispatched/);
@@ -70,7 +71,8 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
     expect(result.details.taskId).toMatch(/^subagent-/);
     expect(result.details.streamStatus).toBe("running");
     expect(result.details.sessionPath).toBeNull();
-    expect(result.details.task).toBe("查一下项目状态");
+    expect(result.details.task).toBe(task);
+    expect(result.details.taskTitle).toBe("任务：查一下项目状态");
     expect(result.details.agentId).toBe("hana");
     expect(result.details.agentName).toBe("Hana");
     expect(result.details.requestedAgentId).toBe("hana");
@@ -83,7 +85,7 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
     expect(mockStore.defer).toHaveBeenCalledWith(
       expect.stringMatching(/^subagent-/),
       "/test/session.jsonl",
-      expect.objectContaining({ type: "subagent" }),
+      expect.objectContaining({ type: "subagent", summary: "任务：查一下项目状态" }),
     );
   });
 
@@ -128,6 +130,23 @@ describe("subagent-tool (executeIsolated 原子模式)", () => {
         }),
       );
     });
+  });
+
+  it("uses the original first line as taskTitle and dispatches task unchanged", async () => {
+    const executeIsolated = makeExecuteIsolated();
+    const tool = createSubagentTool(makeDeps({
+      executeIsolated,
+      getDeferredStore: () => mockStore,
+    }));
+
+    const task = "你是一个生活规划助手。请为用户制定一份**一周生活规律建议**，涵盖以下五个方面：\n\n1. 作息\n2. 运动";
+    const result = await tool.execute("call_1", { task }, null, null, mockCtx());
+
+    expect(result.details.taskTitle).toBe("你是一个生活规划助手。请为用户制定一份**一周生活规律建议**，涵盖以下五个方面：");
+    expect(executeIsolated).toHaveBeenCalledWith(
+      task,
+      expect.any(Object),
+    );
   });
 
   // 2. deferred store resolves on success

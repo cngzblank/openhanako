@@ -15,27 +15,11 @@ import styles from './Chat.module.css';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const SUBAGENT_PREVIEW_CLOSE_MS = 200;
 
-function buildTaskSummary(task: string): string {
-  const normalized = task
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .find((line) => !/^(要求[:：]?|\d+\.)/.test(line) && !/^请开始执行/.test(line))
-    || task;
-
-  return normalized
-    .replace(/^你现在是一个[^。！？!?\n]*[。！？!?\s]*/u, '')
-    .replace(/^你是一个[^。！？!?\n]*[。！？!?\s]*/u, '')
-    .replace(/^请为用户/u, '')
-    .replace(/^请/u, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 interface SubagentCardProps {
   block: {
     taskId: string;
     task: string;
+    taskTitle: string;
     agentId?: string;
     agentName?: string;
     requestedAgentId?: string;
@@ -49,7 +33,6 @@ interface SubagentCardProps {
 }
 
 export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardProps) {
-  const taskSummary = useMemo(() => buildTaskSummary(block.task || ''), [block.task]);
   const [status, setStatus] = useState(block.streamStatus);
   const [display, setDisplay] = useState<string>(() => {
     if (block.streamStatus === 'done') return block.summary || '已完成';
@@ -168,7 +151,7 @@ export const SubagentCard = memo(function SubagentCard({ block }: SubagentCardPr
     useStore.getState().openSubagentPreview(block.taskId, block.streamKey || null);
   }, [block.taskId, block.streamKey, isOpen]);
 
-  const headerDisplay = isOpen ? (isInterrupted ? '' : display) : taskSummary;
+  const headerDisplay = block.taskTitle;
 
   return (
     <div className={`${styles.subagentCard} ${styles[`subagent-${status}`]}`}>

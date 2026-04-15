@@ -134,6 +134,7 @@ describe('SubagentCard inline preview interaction', () => {
         block={{
           taskId: 'task-a',
           task: 'do work',
+          taskTitle: '任务：do work',
           agentName: 'SORA',
           streamKey: '/session/subagent-a',
           streamStatus: 'done',
@@ -156,12 +157,13 @@ describe('SubagentCard inline preview interaction', () => {
     expect(screen.queryByText('Preview A')).toBeNull();
   });
 
-  it('收起态显示任务摘要，而不是实时输出摘要', () => {
+  it('收起态显式信任 taskTitle，而不是再从 task 猜摘要', () => {
     render(
       <SubagentCard
         block={{
           taskId: 'task-a',
-          task: '你是一个生活整理顾问。请为用户制定一份一周生活整理清单。\n\n要求：\n1. 独立完成',
+          task: '任务：这是一段不该显示的旧字段内容\n\n你是一个生活整理顾问。请为用户制定一份一周生活整理清单。',
+          taskTitle: '任务：制定一份一周生活整理清单',
           agentName: 'SORA',
           streamKey: '/session/subagent-a',
           streamStatus: 'done',
@@ -170,8 +172,31 @@ describe('SubagentCard inline preview interaction', () => {
       />,
     );
 
-    expect(screen.getByText('制定一份一周生活整理清单。')).toBeTruthy();
+    expect(screen.getByText('任务：制定一份一周生活整理清单')).toBeTruthy();
+    expect(screen.queryByText('任务：这是一段不该显示的旧字段内容')).toBeNull();
     expect(screen.queryByText('这里是运行时输出，不该出现在收起态')).toBeNull();
+  });
+
+  it('展开后 header 继续显示 taskTitle，不切换成运行时输出', () => {
+    render(
+      <SubagentCard
+        block={{
+          taskId: 'task-a',
+          task: '任务：这是一段旧正文\n\n详细要求',
+          taskTitle: '任务：制定一份一周生活整理清单',
+          agentName: 'SORA',
+          streamKey: '/session/subagent-a',
+          streamStatus: 'done',
+          summary: '这里是运行时输出，不该抢占 header',
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /SORA/i }));
+
+    expect(screen.getByText('任务：制定一份一周生活整理清单')).toBeTruthy();
+    expect(screen.queryByText('这里是运行时输出，不该抢占 header')).toBeNull();
+    expect(screen.getByText('Preview A')).toBeTruthy();
   });
 
   it('多张 subagent 卡可以同时保持展开', () => {
@@ -181,6 +206,7 @@ describe('SubagentCard inline preview interaction', () => {
           block={{
             taskId: 'task-a',
             task: 'do work',
+            taskTitle: '任务：do work',
             agentName: 'SORA',
             streamKey: '/session/subagent-a',
             streamStatus: 'done',
@@ -191,6 +217,7 @@ describe('SubagentCard inline preview interaction', () => {
           block={{
             taskId: 'task-b',
             task: 'do work',
+            taskTitle: '任务：do work',
             agentName: 'MORI',
             streamKey: '/session/subagent-b',
             streamStatus: 'done',

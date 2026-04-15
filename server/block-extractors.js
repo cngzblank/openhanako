@@ -79,6 +79,7 @@ export const BLOCK_EXTRACTORS = {
       type: "subagent",
       taskId: details.taskId,
       task: details.task || "",
+      taskTitle: details.taskTitle || "",
       agentId: executor?.agentId || null,
       agentName: executor?.agentName || null,
       requestedAgentId,

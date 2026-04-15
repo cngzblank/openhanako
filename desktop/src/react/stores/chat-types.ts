@@ -53,6 +53,7 @@ export type RichBlock =
     type: 'subagent';
     taskId: string;
     task: string;
+    taskTitle: string;
     agentId?: string;
     agentName?: string;
     requestedAgentId?: string;
