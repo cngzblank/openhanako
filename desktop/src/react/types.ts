@@ -155,6 +155,8 @@ export interface PlatformApi {
   unwatchFile(filePath: string): Promise<boolean>;
   onFileChanged(callback: (filePath: string) => void): void;
   readFileBase64(path: string): Promise<string | null>;
+  /** 把本地路径转成 <img>/<video> 可用的 file:// URL（同步，纯路径转换） */
+  getFileUrl(path: string): string;
   readDocxHtml(path: string): Promise<string | null>;
   readXlsxHtml(path: string): Promise<string | null>;
   openEditorWindow(data: { filePath: string; title: string; type: string; language?: string | null }): void;
