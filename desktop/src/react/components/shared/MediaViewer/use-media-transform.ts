@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 
 export interface Transform {
   scale: number;
@@ -72,17 +73,17 @@ export function useMediaTransform(opts: {
 
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number; moved: boolean } | null>(null);
 
-  const onWheel = useCallback((e: WheelEvent) => {
+  const onWheel = useCallback((e: React.WheelEvent<HTMLElement>) => {
     e.preventDefault();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const rect = e.currentTarget.getBoundingClientRect();
     const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     setTransform((t) => zoomAtPoint(t, point, factor, range));
   }, [range.min, range.max]);
 
-  const onPointerDown = useCallback((e: PointerEvent) => {
+  const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
     if (transform.scale <= fitScale) return; // 只有放大后才允许拖动
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -92,7 +93,7 @@ export function useMediaTransform(opts: {
     };
   }, [transform.scale, transform.offsetX, transform.offsetY, fitScale]);
 
-  const onPointerMove = useCallback((e: PointerEvent) => {
+  const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
     const d = dragRef.current;
     if (!d) return;
     const dx = e.clientX - d.startX;
@@ -101,8 +102,8 @@ export function useMediaTransform(opts: {
     setTransform((t) => ({ ...t, offsetX: d.baseX + dx, offsetY: d.baseY + dy }));
   }, []);
 
-  const onPointerUp = useCallback((e: PointerEvent) => {
-    const el = e.currentTarget as HTMLElement;
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    const el = e.currentTarget;
     if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId);
     dragRef.current = null;
   }, []);
