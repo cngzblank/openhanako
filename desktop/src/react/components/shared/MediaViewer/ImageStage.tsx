@@ -31,9 +31,10 @@ export function ImageStage({ file, viewport, neighbors, onReady, onError }: Prop
   }, [file.id]);
 
   // 邻近预加载（触发浏览器缓存）
+  // 仅对 image/svg 预加载：loadMediaSource 只支持这两类，其他 kind 会抛 "unsupported media kind"。
   useEffect(() => {
     const preload = async (nf?: FileRef) => {
-      if (!nf || nf.kind === 'video') return;
+      if (!nf || (nf.kind !== 'image' && nf.kind !== 'svg')) return;
       try {
         const s = await loadMediaSource(nf);
         const img = new Image();
@@ -75,6 +76,7 @@ export function ImageStage({ file, viewport, neighbors, onReady, onError }: Prop
             setNatural({ w: el.naturalWidth, h: el.naturalHeight });
             onReady?.();
           }}
+          onError={() => onError?.(new Error(`image decode failed: ${file.name}`))}
           draggable={false}
           className={styles.stageImg}
         />
