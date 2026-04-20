@@ -63,6 +63,60 @@ describe("estimateMessagesTokens / estimatePreparationTokens", () => {
     const total = estimateMessagesTokens(msgs);
     expect(total).toBeGreaterThan(0);
   });
+
+  it("returns only history tokens when not a split-turn", () => {
+    const history = [{ role: "user", content: "x".repeat(1000) }];
+    const preparation = {
+      messagesToSummarize: history,
+      isSplitTurn: false,
+      turnPrefixMessages: [],
+    };
+    const historyOnly = estimateMessagesTokens(history);
+    expect(estimatePreparationTokens(preparation)).toBe(historyOnly);
+  });
+
+  it("returns MAX of history and turnPrefix on split-turn (not sum)", () => {
+    // 两者 token 数不同，且 turnPrefix 更大时应该返回 turnPrefix 的值
+    const smallHistory = [{ role: "user", content: "hi" }];
+    const bigTurnPrefix = [{ role: "user", content: "x".repeat(10_000) }];
+    const preparation = {
+      messagesToSummarize: smallHistory,
+      isSplitTurn: true,
+      turnPrefixMessages: bigTurnPrefix,
+    };
+    const expected = Math.max(
+      estimateMessagesTokens(smallHistory),
+      estimateMessagesTokens(bigTurnPrefix),
+    );
+    expect(estimatePreparationTokens(preparation)).toBe(expected);
+    // 确保返回值等于更大的那个（turnPrefix），不是 sum
+    expect(estimatePreparationTokens(preparation)).toBe(estimateMessagesTokens(bigTurnPrefix));
+    expect(estimatePreparationTokens(preparation)).toBeLessThan(
+      estimateMessagesTokens(smallHistory) + estimateMessagesTokens(bigTurnPrefix),
+    );
+  });
+
+  it("returns history tokens when history is larger on split-turn", () => {
+    const bigHistory = [{ role: "user", content: "x".repeat(20_000) }];
+    const smallTurnPrefix = [{ role: "user", content: "hi" }];
+    const preparation = {
+      messagesToSummarize: bigHistory,
+      isSplitTurn: true,
+      turnPrefixMessages: smallTurnPrefix,
+    };
+    expect(estimatePreparationTokens(preparation)).toBe(estimateMessagesTokens(bigHistory));
+  });
+
+  it("ignores turnPrefixMessages when isSplitTurn is false (even if present)", () => {
+    const history = [{ role: "user", content: "hi" }];
+    const hugePrefix = [{ role: "user", content: "x".repeat(50_000) }];
+    const preparation = {
+      messagesToSummarize: history,
+      isSplitTurn: false,
+      turnPrefixMessages: hugePrefix, // 存在但不应被计入
+    };
+    expect(estimatePreparationTokens(preparation)).toBe(estimateMessagesTokens(history));
+  });
 });
 
 describe("computeHardTruncation", () => {

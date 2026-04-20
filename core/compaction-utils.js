@@ -65,14 +65,29 @@ export function estimateMessagesTokens(messages) {
 }
 
 /**
- * 估算 preparation.messagesToSummarize 的 token 总量。
- * 用于 compaction-guard 判断"LLM 摘要是否会超窗"。
+ * 估算"LLM 摘要调用的最坏情况输入 token 数"。
+ *
+ * 背景：pi SDK 的 compact() 在 split-turn 时会并行跑两次 LLM：
+ *   1. generateSummary(messagesToSummarize)
+ *   2. generateTurnPrefixSummary(turnPrefixMessages)
+ * 见 node_modules/@mariozechner/pi-coding-agent/dist/core/compaction/compaction.js:557-568
+ *
+ * 两个调用互相独立，任一输入超窗都会让整个 compact() 抛错，
+ * 导致 issue#437 的死锁场景。所以 guard 判断必须取两者最大值，
+ * 不能只看 messagesToSummarize。
+ *
  * @param {object} preparation - pi SDK prepareCompaction 的返回
- * @returns {number}
+ * @returns {number} 最坏情况下单次 LLM 调用的输入 token 数
  */
 export function estimatePreparationTokens(preparation) {
-  if (!preparation?.messagesToSummarize) return 0;
-  return estimateMessagesTokens(preparation.messagesToSummarize);
+  if (!preparation) return 0;
+  const historyTokens = preparation.messagesToSummarize
+    ? estimateMessagesTokens(preparation.messagesToSummarize)
+    : 0;
+  const turnPrefixTokens = preparation.isSplitTurn && preparation.turnPrefixMessages
+    ? estimateMessagesTokens(preparation.turnPrefixMessages)
+    : 0;
+  return Math.max(historyTokens, turnPrefixTokens);
 }
 
 /**
