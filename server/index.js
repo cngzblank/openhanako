@@ -52,6 +52,7 @@ import { createCheckpointsRoute } from "./routes/checkpoints.js";
 import { ConfirmStore } from "../lib/confirm-store.js";
 import { DeferredResultStore } from "../lib/deferred-result-store.js";
 import { createDeferredResultExtension } from "../lib/extensions/deferred-result-ext.js";
+import { createCompactionGuardExtension } from "../lib/extensions/compaction-guard-ext.js";
 import { BridgeManager } from "../lib/bridge/bridge-manager.js";
 import { Hub } from "../hub/index.js";
 import { startCLI } from "./cli.js";
@@ -92,27 +93,11 @@ dlog.log("server", "engine initialized");
 import { BrowserManager } from "../lib/browser/browser-manager.js";
 BrowserManager.setHanakoHome(engine.hanakoHome);
 
-if (engine.currentModel) {
-  console.log("[server] ③ 创建 session...");
-  await engine.createSession();
-  console.log("[server] ③ Session created");
-  dlog.log("server", `session created, model=${engine.currentModel.name}`);
-} else {
-  // 诊断信息：区分三种 currentModel=null 的情况，方便用户排查 (#414)
-  const availableCount = engine.availableModels?.length ?? 0;
-  const chatRef = engine.agent?.config?.models?.chat;
-  const chatRefStr = typeof chatRef === "object" ? JSON.stringify(chatRef) : (chatRef || "(empty)");
-  let reason;
-  if (availableCount === 0) {
-    reason = "available models list is empty (no provider has valid api_key + models)";
-  } else if (!chatRef) {
-    reason = `agent.config.models.chat is empty, but ${availableCount} models are available`;
-  } else {
-    reason = `models.chat=${chatRefStr} not found in ${availableCount} available models`;
-  }
-  console.warn(`[server] ⚠ 无可用模型，跳过 session 创建：${reason}`);
-  dlog.warn("server", `session creation skipped: ${reason}`);
-}
+// 注：createSession 必须在所有 Pi SDK extension factory 都注册完之后
+// (framework extension via registerExtensionFactory + plugin extension via
+//  initPlugins)。否则 ExtensionRunner 在 session 构造时只绑定当时已有的
+// factories，后注册的 extension 不会追溯挂到这个 session 上。
+// 实际 createSession 调用下移到 initPlugins + registerExtensionFactory 之后。
 
 // 写日志头部
 dlog.header(appVersion, {
@@ -246,6 +231,34 @@ hub.eventBus.handle("session:get-titles", async ({ paths }) => {
 
 // Register Pi SDK extension factory
 engine.registerExtensionFactory(createDeferredResultExtension(deferredResultStore));
+// Compaction guard — 防 session 因上下文超限死锁（issue#437）
+engine.registerExtensionFactory(createCompactionGuardExtension());
+
+// ── 启动默认 session ──
+// 时序要求：所有 framework extension + plugin extension 都注册完之后再 create，
+// 否则 pi SDK ExtensionRunner 构造时拿不到这些 factory，extension 不会挂到
+// startup session 上（Codex 评审发现的 issue#437 部分失效场景）。
+if (engine.currentModel) {
+  console.log("[server] ③ 创建 session...");
+  await engine.createSession();
+  console.log("[server] ③ Session created");
+  dlog.log("server", `session created, model=${engine.currentModel.name}`);
+} else {
+  // 诊断信息：区分三种 currentModel=null 的情况，方便用户排查 (#414)
+  const availableCount = engine.availableModels?.length ?? 0;
+  const chatRef = engine.agent?.config?.models?.chat;
+  const chatRefStr = typeof chatRef === "object" ? JSON.stringify(chatRef) : (chatRef || "(empty)");
+  let reason;
+  if (availableCount === 0) {
+    reason = "available models list is empty (no provider has valid api_key + models)";
+  } else if (!chatRef) {
+    reason = `agent.config.models.chat is empty, but ${availableCount} models are available`;
+  } else {
+    reason = `models.chat=${chatRefStr} not found in ${availableCount} available models`;
+  }
+  console.warn(`[server] ⚠ 无可用模型，跳过 session 创建：${reason}`);
+  dlog.warn("server", `session creation skipped: ${reason}`);
+}
 
 // ── 外部平台接入管理器 ──
 const bridgeManager = new BridgeManager({ engine, hub });
