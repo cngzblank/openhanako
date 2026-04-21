@@ -3049,6 +3049,21 @@ html[data-platform="linux"] .onboarding {
     color: var(--accent);
 }
 
+.yuan-chip:disabled {
+    opacity: 0.55;
+    cursor: progress;
+}
+
+.yuan-chip:disabled:hover {
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+
+.yuan-chip.selected:disabled:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .yuan-chip-avatar {
     width: 40px;
     height: 40px;
