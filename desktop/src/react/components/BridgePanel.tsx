@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../stores';
 import { hanaFetch } from '../hooks/use-hana-fetch';
-import { formatSessionDate, parseMoodFromContent } from '../utils/format';
+import { formatSessionDate } from '../utils/format';
+import { parseMoodFromContent, moodLabel } from '../utils/message-parser';
 import { renderMarkdown } from '../utils/markdown';
 
 interface BridgeSession {
@@ -354,12 +355,27 @@ function ContactAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }
   );
 }
 
+function MoodWidget({ yuan, text }: { yuan: string; text: string }) {
+  const [open, setOpen] = useState(false);
+  const toggle = useCallback(() => setOpen(v => !v), []);
+  return (
+    <div className="mood-wrapper" data-yuan={yuan}>
+      <div className="mood-summary" onClick={toggle}>
+        <span className={`mood-arrow${open ? ' mood-arrow-open' : ''}`}>›</span>
+        {' '}{moodLabel(yuan)}
+      </div>
+      {open && <div className="mood-block">{text}</div>}
+    </div>
+  );
+}
+
 function ChatBubble({ message: m }: { message: BridgeMessage }) {
   if (m.role === 'assistant') {
-    const { text } = parseMoodFromContent(m.content);
-    const cleaned = (text || m.content).replace(/<tool_code>[\s\S]*?<\/tool_code>\s*/g, '');
+    const { mood, yuan, text } = parseMoodFromContent(m.content);
+    const cleaned = text.replace(/<tool_code>[\s\S]*?<\/tool_code>\s*/g, '');
     return (
       <div className="bridge-bubble-row bridge-bubble-in">
+        {mood && yuan && <MoodWidget yuan={yuan} text={mood} />}
         <div className="bridge-bubble" dangerouslySetInnerHTML={{ __html: renderMarkdown(cleaned) }} />
       </div>
     );
