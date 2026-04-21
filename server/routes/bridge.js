@@ -155,50 +155,50 @@ export function createBridgeRoute(engine, bridgeManager) {
   /** 获取 bridge session 列表 */
   route.get("/bridge/sessions", async (c) => {
     const platform = c.req.query("platform"); // optional filter
-    const agent = resolveAgent(engine, c);
-    const index = engine.getBridgeIndex(agent.id);
-    const bridgeDir = path.join(agent.sessionDir, "bridge");
-    const agentBridge = agent.config?.bridge || {};
-    const owner = {};
-    for (const plat of KNOWN_PLATFORMS) {
-      const o = agentBridge[plat]?.owner;
-      if (o) owner[plat] = o;
-    }
     const sessions = [];
+    const seenKeys = new Set();
+    const agents = engine.listAgents();
 
-    for (const [sessionKey, raw] of Object.entries(index)) {
-      // 兼容旧格式（字符串）和新格式（对象）
-      const entry = typeof raw === "string" ? { file: raw } : raw;
-      const file = entry.file;
-      if (!file) continue;
+    for (const ag of agents) {
+      const index = engine.getBridgeIndex(ag.id);
+      const bridgeDir = path.join(ag.sessionDir, "bridge");
+      const agentBridge = ag.config?.bridge || {};
+      const owner = {};
+      for (const plat of KNOWN_PLATFORMS) {
+        const o = agentBridge[plat]?.owner;
+        if (o) owner[plat] = o;
+      }
 
-      // 解析 sessionKey → 平台 + 类型
-      const { platform: plat, chatType, chatId } = parseSessionKey(sessionKey);
+      for (const [sessionKey, raw] of Object.entries(index)) {
+        if (seenKeys.has(sessionKey)) continue;
+        seenKeys.add(sessionKey);
 
-      // 按平台过滤
-      if (platform && plat !== platform) continue;
+        const entry = typeof raw === "string" ? { file: raw } : raw;
+        const file = entry.file;
+        if (!file) continue;
 
-      // 获取最后修改时间
-      let lastActive = null;
-      const fp = path.join(bridgeDir, file);
-      try {
-        const stat = fs.statSync(fp);
-        lastActive = stat.mtimeMs;
-      } catch {}
+        const { platform: plat, chatType, chatId } = parseSessionKey(sessionKey);
+        if (platform && plat !== platform) continue;
 
-      // isOwner 运行时计算：per-agent owner dict
-      const ownerUserId = owner[plat] || null;
-      const isOwner = !!(entry.userId && ownerUserId && entry.userId === ownerUserId);
+        let lastActive = null;
+        const fp = path.join(bridgeDir, file);
+        try {
+          const stat = fs.statSync(fp);
+          lastActive = stat.mtimeMs;
+        } catch {}
 
-      sessions.push({
-        sessionKey, platform: plat, chatType, chatId, file, lastActive,
-        displayName: entry.name || null,
-        avatarUrl: entry.avatarUrl || null,
-        isOwner,
-      });
+        const ownerUserId = owner[plat] || null;
+        const isOwner = !!(entry.userId && ownerUserId && entry.userId === ownerUserId);
+
+        sessions.push({
+          sessionKey, platform: plat, chatType, chatId, file, lastActive,
+          displayName: entry.name || null,
+          avatarUrl: entry.avatarUrl || null,
+          isOwner,
+        });
+      }
     }
 
-    // 按最后活跃时间排序
     sessions.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
     return c.json({ sessions });
   });
@@ -206,13 +206,25 @@ export function createBridgeRoute(engine, bridgeManager) {
   /** 读取指定 bridge session 的消息 */
   route.get("/bridge/sessions/:sessionKey/messages", async (c) => {
     const sessionKey = c.req.param("sessionKey");
-    const agent = resolveAgent(engine, c);
-    const index = engine.getBridgeIndex(agent.id);
-    const raw = index[sessionKey];
-    const file = typeof raw === "string" ? raw : raw?.file;
-    if (!file) return c.json({ error: "session not found", messages: [] });
 
-    const bridgeDir = path.join(agent.sessionDir, "bridge");
+    // 在所有 agents 中查找该 sessionKey 的消息文件
+    let file = null;
+    let bridgeDir = null;
+    let agentPlatform = null;
+    const agents = engine.listAgents();
+    for (const ag of agents) {
+      const agBridgeDir = path.join(ag.sessionDir, "bridge");
+      const indexPath = path.join(agBridgeDir, "bridge-sessions.json");
+      try {
+        const index = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+        const raw = index[sessionKey];
+        const f = typeof raw === "string" ? raw : raw?.file;
+        if (f) { file = f; bridgeDir = agBridgeDir; agentPlatform = parseSessionKey(sessionKey).platform; break; }
+      } catch { continue; }
+    }
+
+    if (!file || !bridgeDir) return c.json({ error: "session not found", messages: [] });
+
     const fp = path.resolve(bridgeDir, file);
 
     // 防止 path traversal
@@ -250,7 +262,8 @@ export function createBridgeRoute(engine, bridgeManager) {
         let senderName = null;
         const msgUserId = msg.userId || null;
         if (msgUserId) {
-          const userMap = agent.config?.bridge?.[parseSessionKey(sessionKey).platform]?.userMap || {};
+          const prefs = engine.getPreferences();
+          const userMap = prefs.bridge?.[agentPlatform]?.userMap || {};
           senderName = userMap[msgUserId] || null;
         }
 
