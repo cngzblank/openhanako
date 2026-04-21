@@ -6,324 +6,223 @@
 
 import fs from "fs";
 import path from "path";
-import WebSocket from "ws";
+import { Hono } from "hono";
+import { safeJson } from "../hono-helpers.js";
+import { getWechatQrcode, pollWechatQrcodeStatus } from "../../lib/bridge/wechat-login.js";
 import { debugLog } from "../../lib/debug-log.js";
-import { parseSessionKey, collectKnownUsers, KNOWN_PLATFORMS, isValidInstanceId, getBasePlatform } from "../../lib/bridge/session-key.js";
+import { parseSessionKey, collectKnownUsers, KNOWN_PLATFORMS } from "../../lib/bridge/session-key.js";
+import { t } from "../i18n.js";
+import { resolveAgent, resolveAgentStrict } from "../utils/resolve-agent.js";
 
-export default async function bridgeRoute(app, { engine, bridgeManager }) {
 
-  /** 获取所有平台连接状态（支持多实例） */
-  app.get("/api/bridge/status", async () => {
-    const prefs = engine.getPreferences();
-    const bridge = prefs.bridge || {};
-    const live = bridgeManager.getStatus();
+import WebSocket from "ws";
 
-    // 凭证做遮掩后返回，供前端回显
-    const mask = (s) => s.length <= 8 ? "••••" : s.slice(0, 4) + "••••" + s.slice(-4);
+export function createBridgeRoute(engine, bridgeManager) {
+  const route = new Hono();
 
-    // 收集所有实例（从 preferences 和 live 状态合并）
-    const instanceIds = new Set();
-    for (const key of Object.keys(bridge)) {
-      if (key === "owner" || key === "readOnly") continue;
-      if (isValidInstanceId(key)) instanceIds.add(key);
-    }
-    for (const key of Object.keys(live)) {
-      instanceIds.add(key);
-    }
+  /** 获取所有平台连接状态（从 agent.config.bridge 读取） */
+  route.get("/bridge/status", async (c) => {
+    const agent = resolveAgent(engine, c);
+    const live = bridgeManager.getStatus(agent.id);
+    const bridge = agent.config?.bridge || {};
 
-    // 构建实例状态数组
-    const instances = {};
-    for (const id of instanceIds) {
-      const cfg = bridge[id] || {};
-      const base = getBasePlatform(id);
-      const liveEntry = live[id] || {};
-
-      if (base === "telegram") {
-        const token = cfg.token || "";
-        instances[id] = {
-          basePlatform: base,
-          configured: !!token,
-          enabled: !!cfg.enabled,
-          status: liveEntry.status || "disconnected",
-          error: liveEntry.error || null,
-          tokenMasked: token ? mask(token) : "",
-          label: cfg.label || null,
-        };
-      } else if (base === "feishu") {
-        const appId = cfg.appId || "";
-        const appSecret = cfg.appSecret || "";
-        instances[id] = {
-          basePlatform: base,
-          configured: !!(appId && appSecret),
-          enabled: !!cfg.enabled,
-          status: liveEntry.status || "disconnected",
-          error: liveEntry.error || null,
-          appId,
-          appSecretMasked: appSecret ? mask(appSecret) : "",
-          label: cfg.label || null,
-          role: cfg.role || "ai",
-        };
-      } else if (base === "qq") {
-        const secret = cfg.appSecret || cfg.token;
-        instances[id] = {
-          basePlatform: base,
-          configured: !!(cfg.appID && secret),
-          enabled: !!cfg.enabled,
-          status: liveEntry.status || "disconnected",
-          error: liveEntry.error || null,
-          appID: cfg.appID || "",
-          appSecretMasked: secret ? mask(secret) : "",
-          label: cfg.label || null,
-        };
-      } else if (base === "wechat") {
-        const token = cfg.token || "";
-        instances[id] = {
-          basePlatform: base,
-          configured: !!token,
-          enabled: !!cfg.enabled,
-          status: liveEntry.status || "disconnected",
-          error: liveEntry.error || null,
-          tokenMasked: token ? mask(token) : "",
-          baseUrl: cfg.baseUrl || "",
-          label: cfg.label || null,
-        };
-      } else if (base === "workwechat") {
-        const botId = cfg.botId || "";
-        const secret = cfg.secret || "";
-        instances[id] = {
-          basePlatform: base,
-          configured: !!(botId && secret),
-          enabled: !!cfg.enabled,
-          status: liveEntry.status || "disconnected",
-          error: liveEntry.error || null,
-          botId,
-          secretMasked: secret ? mask(secret) : "",
-          label: cfg.label || null,
-          userMap: cfg.userMap || {},
-        };
-      }
-    }
-
-    // 兼容旧格式：保留顶层 telegram/feishu/qq 快捷引用（指向默认实例）
-    const tgDef = instances["telegram"] || {};
-    const fsDef = instances["feishu"] || {};
-    const qqDef = instances["qq"] || {};
-    const wxDef = instances["wechat"] || {};
-    const wcDef = instances["workwechat"] || {};
-
-    return {
-      telegram: tgDef,
-      feishu: fsDef,
-      qq: qqDef,
-      wechat: wxDef,
-      workwechat: wcDef,
-      instances,
-      readOnly: !!bridge.readOnly,
-      knownUsers: collectKnownUsers(engine.getBridgeIndex()),
-      owner: bridge.owner || {},
+    const platformStatus = (plat, cfg, extraFields) => {
+      return {
+        ...extraFields,
+        enabled: !!cfg?.enabled,
+        status: live[plat]?.status || "disconnected",
+        error: live[plat]?.error || null,
+        agentId: agent.id,
+      };
     };
+
+    const tgToken = bridge.telegram?.token || "";
+    const fsAppId = bridge.feishu?.appId || "";
+    const fsAppSecret = bridge.feishu?.appSecret || "";
+
+    // Build per-platform owner dict from agent config
+    const ownerDict = {};
+    for (const plat of KNOWN_PLATFORMS) {
+      const o = bridge[plat]?.owner;
+      if (o) ownerDict[plat] = o;
+    }
+
+    return c.json({
+      telegram: platformStatus("telegram", bridge.telegram, {
+        configured: !!tgToken, token: tgToken,
+      }),
+      feishu: platformStatus("feishu", bridge.feishu, {
+        configured: !!(fsAppId && fsAppSecret), appId: fsAppId, appSecret: fsAppSecret,
+      }),
+      qq: platformStatus("qq", bridge.qq, {
+        configured: !!(bridge.qq?.appID && (bridge.qq?.appSecret || bridge.qq?.token)),
+        appID: bridge.qq?.appID || "",
+        appSecret: bridge.qq?.appSecret || bridge.qq?.token || "",
+      }),
+      wechat: platformStatus("wechat", bridge.wechat, {
+        configured: !!bridge.wechat?.botToken,
+        token: bridge.wechat?.botToken || "",
+      }),
+      workwechat: platformStatus("workwechat", bridge.workwechat, {
+        configured: !!(bridge.workwechat?.botId && bridge.workwechat?.secret),
+        botId: bridge.workwechat?.botId || "",
+        userMap: bridge.workwechat?.userMap || {},
+      }),
+      readOnly: !!bridge.readOnly,
+      knownUsers: collectKnownUsers(engine.getBridgeIndex(agent.id)),
+      owner: ownerDict,
+    });
   });
 
-  /** 设置 owner（哪个账号是你） */
-  app.post("/api/bridge/owner", async (req) => {
-    const { platform, userId } = req.body || {};
+  /** 设置 owner（哪个账号是你）— 写入 agent.config.bridge */
+  route.post("/bridge/owner", async (c) => {
+    const body = await safeJson(c);
+    const { platform, userId } = body;
     if (!platform || !KNOWN_PLATFORMS.includes(platform)) {
-      return { ok: false, error: "invalid platform" };
+      return c.json({ ok: false, error: "invalid platform" });
     }
-    const prefs = engine.getPreferences();
-    if (!prefs.bridge) prefs.bridge = {};
-    if (!prefs.bridge.owner) prefs.bridge.owner = {};
-    if (userId) {
-      prefs.bridge.owner[platform] = userId;
+    const agent = resolveAgentStrict(engine, c);
+    agent.updateConfig({ bridge: { [platform]: { owner: userId || null } } });
+    debugLog()?.log("api", `POST /api/bridge/owner agent=${agent.id} platform=${platform} owner=${userId ? "[set]" : "[cleared]"}`);
+    return c.json({ ok: true });
+  });
+
+  /** 保存凭证 + 启停平台（写入 agent.config.bridge） */
+  route.post("/bridge/config", async (c) => {
+    const body = await safeJson(c);
+    const { platform, credentials, enabled } = body;
+    if (!platform || !KNOWN_PLATFORMS.includes(platform)) {
+      return c.json({ error: "invalid platform" }, 400);
+    }
+
+    const agent = resolveAgentStrict(engine, c);
+    const agentId = agent.id;
+
+    const bridgeCfg = agent.config?.bridge?.[platform] || {};
+    const patch = { ...bridgeCfg };
+
+    if (credentials) Object.assign(patch, credentials);
+    if (typeof enabled === "boolean") patch.enabled = enabled;
+
+    agent.updateConfig({ bridge: { [platform]: patch } });
+
+    // Start/stop
+    if (patch.enabled) {
+      bridgeManager.startPlatformFromConfig(platform, patch, agentId);
     } else {
-      delete prefs.bridge.owner[platform];
+      bridgeManager.stopPlatform(platform, agentId);
     }
-    engine.savePreferences(prefs);
-    debugLog()?.log("api", `POST /api/bridge/owner platform=${platform} owner=${userId ? "[set]" : "[cleared]"}`);
-    return { ok: true };
+
+    debugLog()?.log("api", `POST /api/bridge/config agent=${agentId} platform=${platform} enabled=${!!patch.enabled}`);
+    return c.json({ ok: true });
   });
 
-  /** 保存凭证 + 启停平台（支持多实例 ID，如 "feishu:2"） */
-  app.post("/api/bridge/config", async (req, reply) => {
-    const { platform, credentials, enabled, label } = req.body || {};
-    if (!platform || !isValidInstanceId(platform)) {
-      reply.code(400);
-      return { error: "invalid platform or instance id" };
+  /** 更新 bridge 设置（readOnly 等）— per-agent */
+  route.post("/bridge/settings", async (c) => {
+    const body = await safeJson(c);
+    const { readOnly } = body;
+    const agent = resolveAgentStrict(engine, c);
+    if (typeof readOnly === "boolean") {
+      agent.updateConfig({ bridge: { readOnly } });
     }
-
-    const prefs = engine.getPreferences();
-    if (!prefs.bridge) prefs.bridge = {};
-    if (!prefs.bridge[platform]) prefs.bridge[platform] = {};
-
-    // 更新凭证
-    if (credentials) {
-      Object.assign(prefs.bridge[platform], credentials);
-    }
-
-    // 更新启用状态
-    if (typeof enabled === "boolean") {
-      prefs.bridge[platform].enabled = enabled;
-    }
-
-    // 更新标签（用于 UI 显示，如"Hanako 飞书"、"Owner 飞书"）
-    if (typeof label === "string") {
-      prefs.bridge[platform].label = label;
-    }
-
-    // 更新角色（"ai" = Hanako AI 自动回复, "owner" = 桌面端 Owner 转发通道）
-    if (typeof req.body?.role === "string" && ["ai", "owner"].includes(req.body.role)) {
-      prefs.bridge[platform].role = req.body.role;
-    }
-
-    // 更新用户昵称映射（企业微信等）
-    if (typeof req.body?.userMap === "object" && req.body.userMap !== null) {
-      prefs.bridge[platform].userMap = req.body.userMap;
-    }
-
-    engine.savePreferences(prefs);
-
-    // 启停（委托给 bridgeManager，由 ADAPTER_REGISTRY 决定凭证提取逻辑）
-    const cfg = prefs.bridge[platform];
-    if (cfg.enabled) {
-      bridgeManager.startPlatformFromConfig(platform, cfg);
-    } else {
-      bridgeManager.stopPlatform(platform);
-    }
-
-    debugLog()?.log("api", `POST /api/bridge/config platform=${platform} enabled=${!!cfg.enabled}`);
-    return { ok: true };
+    debugLog()?.log("api", `POST /api/bridge/settings agent=${agent.id} readOnly=${readOnly}`);
+    return c.json({ ok: true });
   });
 
-  /** 更新 bridge 全局设置（readOnly 等） */
-  app.post("/api/bridge/settings", async (req) => {
-    const { readOnly } = req.body || {};
-    const prefs = engine.getPreferences();
-    if (!prefs.bridge) prefs.bridge = {};
-    if (typeof readOnly === "boolean") prefs.bridge.readOnly = readOnly;
-    engine.savePreferences(prefs);
-    debugLog()?.log("api", `POST /api/bridge/settings readOnly=${prefs.bridge.readOnly}`);
-    return { ok: true };
-  });
-
-  /** 停止指定平台实例 */
-  app.post("/api/bridge/stop", async (req, reply) => {
-    const { platform } = req.body || {};
+  /** 停止指定平台 */
+  route.post("/bridge/stop", async (c) => {
+    const body = await safeJson(c);
+    const { platform } = body;
     if (!platform) {
-      reply.code(400);
-      return { error: "platform required" };
+      return c.json({ error: "platform required" }, 400);
     }
 
-    bridgeManager.stopPlatform(platform);
+    const agent = resolveAgentStrict(engine, c);
+    bridgeManager.stopPlatform(platform, agent.id);
+    agent.updateConfig({ bridge: { [platform]: { enabled: false } } });
 
-    // 同步更新 preferences
-    const prefs = engine.getPreferences();
-    if (prefs.bridge?.[platform]) {
-      prefs.bridge[platform].enabled = false;
-      engine.savePreferences(prefs);
-    }
-
-    debugLog()?.log("api", `POST /api/bridge/stop platform=${platform}`);
-    return { ok: true };
+    debugLog()?.log("api", `POST /api/bridge/stop agent=${agent.id} platform=${platform}`);
+    return c.json({ ok: true });
   });
 
   /** 获取最近消息日志（实时内存缓冲） */
-  app.get("/api/bridge/messages", async (req) => {
-    const limit = parseInt(req.query?.limit) || 50;
-    return { messages: bridgeManager.getMessages(limit) };
+  route.get("/bridge/messages", async (c) => {
+    const limit = parseInt(c.req.query("limit"), 10) || 50;
+    const agent = resolveAgent(engine, c);
+    return c.json({ messages: bridgeManager.getMessages(limit, agent.id) });
   });
 
-  /** 获取 bridge session 列表（跨所有 agents） */
-  app.get("/api/bridge/sessions", async (req) => {
-    const platform = req.query?.platform; // optional filter
-    const prefs = engine.getPreferences();
-    const owner = prefs.bridge?.owner || {};
+  /** 获取 bridge session 列表 */
+  route.get("/bridge/sessions", async (c) => {
+    const platform = c.req.query("platform"); // optional filter
+    const agent = resolveAgent(engine, c);
+    const index = engine.getBridgeIndex(agent.id);
+    const bridgeDir = path.join(agent.sessionDir, "bridge");
+    const agentBridge = agent.config?.bridge || {};
+    const owner = {};
+    for (const plat of KNOWN_PLATFORMS) {
+      const o = agentBridge[plat]?.owner;
+      if (o) owner[plat] = o;
+    }
     const sessions = [];
-    const seenKeys = new Set();
 
-    const agents = engine.listAgents();
-    for (const ag of agents) {
-      const bridgeDir = path.join(engine.agentsDir, ag.id, "sessions", "bridge");
-      const indexPath = path.join(bridgeDir, "bridge-sessions.json");
-      let index;
-      try { index = JSON.parse(fs.readFileSync(indexPath, "utf-8")); } catch { continue; }
+    for (const [sessionKey, raw] of Object.entries(index)) {
+      // 兼容旧格式（字符串）和新格式（对象）
+      const entry = typeof raw === "string" ? { file: raw } : raw;
+      const file = entry.file;
+      if (!file) continue;
 
-      for (const [sessionKey, raw] of Object.entries(index)) {
-        if (seenKeys.has(sessionKey)) continue;
-        seenKeys.add(sessionKey);
+      // 解析 sessionKey → 平台 + 类型
+      const { platform: plat, chatType, chatId } = parseSessionKey(sessionKey);
 
-        // 兼容旧格式（字符串）和新格式（对象）
-        const entry = typeof raw === "string" ? { file: raw } : raw;
-        const file = entry.file;
-        if (!file) continue;
+      // 按平台过滤
+      if (platform && plat !== platform) continue;
 
-        // 解析 sessionKey → 平台 + 类型
-        const { platform: plat, chatType, chatId } = parseSessionKey(sessionKey);
+      // 获取最后修改时间
+      let lastActive = null;
+      const fp = path.join(bridgeDir, file);
+      try {
+        const stat = fs.statSync(fp);
+        lastActive = stat.mtimeMs;
+      } catch {}
 
-        // 按平台过滤
-        if (platform && plat !== platform) continue;
+      // isOwner 运行时计算：per-agent owner dict
+      const ownerUserId = owner[plat] || null;
+      const isOwner = !!(entry.userId && ownerUserId && entry.userId === ownerUserId);
 
-        // 获取最后修改时间
-        let lastActive = null;
-        const fp = path.join(bridgeDir, file);
-        try {
-          const stat = fs.statSync(fp);
-          lastActive = stat.mtimeMs;
-        } catch {}
-
-        // isOwner 运行时计算：entry.userId 匹配 prefs.bridge.owner[platform]
-        const ownerUserId = owner[plat] || null;
-        const isOwner = !!(entry.userId && ownerUserId && entry.userId === ownerUserId);
-
-        sessions.push({
-          sessionKey, platform: plat, chatType, chatId, file, lastActive,
-          displayName: entry.name || null,
-          avatarUrl: entry.avatarUrl || null,
-          isOwner,
-        });
-      }
+      sessions.push({
+        sessionKey, platform: plat, chatType, chatId, file, lastActive,
+        displayName: entry.name || null,
+        avatarUrl: entry.avatarUrl || null,
+        isOwner,
+      });
     }
 
     // 按最后活跃时间排序
     sessions.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
-    return { sessions };
+    return c.json({ sessions });
   });
 
-  /** 读取指定 bridge session 的消息（跨所有 agents 查找） */
-  app.get("/api/bridge/sessions/:sessionKey/messages", async (req) => {
-    const { sessionKey } = req.params;
+  /** 读取指定 bridge session 的消息 */
+  route.get("/bridge/sessions/:sessionKey/messages", async (c) => {
+    const sessionKey = c.req.param("sessionKey");
+    const agent = resolveAgent(engine, c);
+    const index = engine.getBridgeIndex(agent.id);
+    const raw = index[sessionKey];
+    const file = typeof raw === "string" ? raw : raw?.file;
+    if (!file) return c.json({ error: "session not found", messages: [] });
 
-    // 在所有 agents 中查找该 sessionKey 的消息文件
-    let file = null;
-    let bridgeDir = null;
-    const agents = engine.listAgents();
-    for (const ag of agents) {
-      const agBridgeDir = path.join(engine.agentsDir, ag.id, "sessions", "bridge");
-      const indexPath = path.join(agBridgeDir, "bridge-sessions.json");
-      try {
-        const index = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
-        const raw = index[sessionKey];
-        const f = typeof raw === "string" ? raw : raw?.file;
-        if (f) { file = f; bridgeDir = agBridgeDir; break; }
-      } catch { continue; }
-    }
-
-    if (!file || !bridgeDir) return { error: "session not found", messages: [] };
-
+    const bridgeDir = path.join(agent.sessionDir, "bridge");
     const fp = path.resolve(bridgeDir, file);
 
     // 防止 path traversal
     if (!fp.startsWith(path.resolve(bridgeDir) + path.sep)) {
-      return { error: "invalid session path", messages: [] };
+      return c.json({ error: "invalid session path", messages: [] });
     }
 
-    // 获取 userMap（用于 senderName 映射）
-    const prefs = engine.getPreferences();
-    const { platform: rawPlatform } = parseSessionKey(sessionKey);
-    const userMap = prefs.bridge?.[rawPlatform]?.userMap || {};
-
     try {
-      const raw = fs.readFileSync(fp, "utf-8");
-      const lines = raw.trim().split("\n").map(l => {
+      const rawContent = fs.readFileSync(fp, "utf-8");
+      const lines = rawContent.trim().split("\n").map(l => {
         try { return JSON.parse(l); } catch { return null; }
       }).filter(Boolean);
 
@@ -333,116 +232,133 @@ export default async function bridgeRoute(app, { engine, bridgeManager }) {
         const msg = line.message;
         if (!msg || (msg.role !== "user" && msg.role !== "assistant")) continue;
 
-        const content = Array.isArray(msg.content)
-          ? msg.content.filter(b => b.type === "text" && b.text).map(b => b.text).join("")
-          : (typeof msg.content === "string" ? msg.content : "");
+        let textContent = "";
+        let mediaCount = 0;
+        if (Array.isArray(msg.content)) {
+          for (const b of msg.content) {
+            if (b.type === "text" && b.text) textContent += b.text;
+            if (b.type === "image") mediaCount++;
+          }
+        } else if (typeof msg.content === "string") {
+          textContent = msg.content;
+        }
 
-        if (!content) continue;
+        const hasMedia = mediaCount > 0;
+        if (!textContent && !hasMedia) continue;
 
         // 从 JSONL 的 userId 字段 + userMap 提取 senderName
-        const msgUserId = msg.userId || null;
         let senderName = null;
+        const msgUserId = msg.userId || null;
         if (msgUserId) {
+          const userMap = agent.config?.bridge?.[parseSessionKey(sessionKey).platform]?.userMap || {};
           senderName = userMap[msgUserId] || null;
         }
-        // 回退：没有 userId/userMap 时，从内容前缀解析
-        if (!senderName) {
-          const laiPrefix = content.match(/^\[来自\s+([^\]]+)\]\s*/);
-          if (laiPrefix) {
-            senderName = laiPrefix[1];
-          }
-        }
 
-        messages.push({ role: msg.role, content, senderName, timestamp: line.timestamp || null, userId: msgUserId });
+        messages.push({
+          role: msg.role,
+          content: textContent || (hasMedia ? `[图片 x${mediaCount}]` : ""),
+          hasMedia,
+          mediaCount,
+          ts: line.timestamp || null,
+          senderName,
+          userId: msgUserId,
+        });
       }
 
-      return { messages };
+      return c.json({ messages });
     } catch (err) {
-      return { error: err.message, messages: [] };
+      return c.json({ error: err.message, messages: [] });
     }
   });
 
   /** 重置 bridge session（清除上下文，下次消息新建 session） */
-  app.post("/api/bridge/sessions/:sessionKey/reset", async (req) => {
-    const { sessionKey } = req.params;
-    const index = engine.getBridgeIndex();
+  route.post("/bridge/sessions/:sessionKey/reset", async (c) => {
+    const sessionKey = c.req.param("sessionKey");
+    const agent = resolveAgentStrict(engine, c);
+    const agentId = agent.id;
+    const index = engine.getBridgeIndex(agentId);
     const raw = index[sessionKey];
-    if (!raw) return { ok: false, error: "session not found" };
+    if (!raw) return c.json({ ok: false, error: "session not found" });
 
     // 保留元数据（name, avatarUrl），只删 file 引用
     const entry = typeof raw === "string" ? {} : { ...raw };
     delete entry.file;
     index[sessionKey] = entry;
-    engine.saveBridgeIndex(index);
+    engine.saveBridgeIndex(index, agentId);
 
-    return { ok: true };
+    return c.json({ ok: true });
   });
 
-  /** 从桌面端发送消息到 bridge session（接管模式） */
-  app.post("/api/bridge/sessions/:sessionKey/send", async (req, reply) => {
-    const { sessionKey } = req.params;
-    const { text } = req.body || {};
-    if (!text) {
-      reply.code(400);
-      return { error: "text required" };
+  /** 发送媒体到 bridge 平台（桌面端推送文件） */
+  route.post("/bridge/send-media", async (c) => {
+    const body = await safeJson(c);
+    const { platform, chatId, filePath } = body;
+    if (!platform || !chatId || !filePath) {
+      return c.json({ error: "platform, chatId, filePath required" }, 400);
     }
 
-    const result = await bridgeManager.sendToSession(sessionKey, text);
-    if (!result.ok) {
-      reply.code(500);
-    }
-    return result;
-  });
+    const agent = resolveAgentStrict(engine, c);
 
-  /** 删除飞书等多实例配置 */
-  app.post("/api/bridge/delete-instance", async (req, reply) => {
-    const { instanceId } = req.body || {};
-    if (!instanceId || !isValidInstanceId(instanceId)) {
-      reply.code(400);
-      return { error: "invalid instance id" };
-    }
-    // 不允许删除基础平台的默认实例（如 "feishu"），只能删多实例后缀的
-    if (!instanceId.includes(":")) {
-      reply.code(400);
-      return { error: "cannot delete default instance, use disable instead" };
+    // 路径安全检查（对齐 fs.js 的 getAllowedRoots 逻辑）
+    const hanaHome = path.resolve(engine.hanakoHome);
+    const allowedRoots = [hanaHome];
+    const deskHome = agent.deskManager?.homePath;
+    if (deskHome) allowedRoots.push(path.resolve(deskHome));
+
+    // 先检查文件是否存在
+    const resolved = path.resolve(filePath);
+    if (!fs.existsSync(resolved)) {
+      return c.json({ error: "file not found" }, 404);
     }
 
-    // 先停止
-    bridgeManager.stopPlatform(instanceId);
+    // 用 realpathSync 解析 symlink，防止 symlink 绕过白名单
+    let realPath;
+    try { realPath = fs.realpathSync(resolved); }
+    catch { return c.json({ error: "file not found" }, 404); }
 
-    // 从 preferences 中删除
-    const prefs = engine.getPreferences();
-    if (prefs.bridge?.[instanceId]) {
-      delete prefs.bridge[instanceId];
-      engine.savePreferences(prefs);
+    const isSafe = allowedRoots.some(root =>
+      realPath === root || realPath.startsWith(root + path.sep)
+    );
+    if (!isSafe) {
+      return c.json({ error: "path outside allowed roots" }, 403);
     }
 
-    debugLog()?.log("api", `POST /api/bridge/delete-instance instanceId=${instanceId}`);
-    return { ok: true };
+    // Fix 3: 文件大小保护（50MB 上限，避免同步读大文件卡事件循环）
+    const MAX_MEDIA_SIZE = 50 * 1024 * 1024;
+    try {
+      const stat = fs.statSync(realPath);
+      if (stat.size > MAX_MEDIA_SIZE) {
+        return c.json({ error: `file too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max 50MB)` }, 413);
+      }
+    } catch { return c.json({ error: "file not found" }, 404); }
+
+    try {
+      await bridgeManager.sendMediaFile(platform, chatId, realPath, agent.id);
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: err.message }, 500);
+    }
   });
 
   /** 测试凭证（不启动轮询） */
-  app.post("/api/bridge/test", async (req, reply) => {
-    const { platform, credentials } = req.body || {};
+  route.post("/bridge/test", async (c) => {
+    const body = await safeJson(c);
+    const { platform, credentials } = body;
     if (!platform || !credentials) {
-      reply.code(400);
-      return { error: "platform and credentials required" };
+      return c.json({ error: "platform and credentials required" }, 400);
     }
 
-    // 支持实例 ID（如 "feishu:2"），提取基础平台名用于测试
-    const basePlatform = getBasePlatform(platform);
-    if (!KNOWN_PLATFORMS.includes(basePlatform)) {
-      reply.code(400);
-      return { error: "unknown platform" };
+    if (!KNOWN_PLATFORMS.includes(platform)) {
+      return c.json({ error: "unknown platform" }, 400);
     }
 
     try {
-      if (basePlatform === "telegram") {
+      if (platform === "telegram") {
         const TelegramBot = (await import("node-telegram-bot-api")).default;
         const bot = new TelegramBot(credentials.token);
         const me = await bot.getMe();
-        return { ok: true, info: { username: me.username, name: me.first_name } };
-      } else if (basePlatform === "feishu") {
+        return c.json({ ok: true, info: { username: me.username, name: me.first_name } });
+      } else if (platform === "feishu") {
         const resp = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -453,10 +369,10 @@ export default async function bridgeRoute(app, { engine, bridgeManager }) {
         });
         const data = await resp.json();
         if (data.code === 0) {
-          return { ok: true, info: { msg: "token 获取成功" } };
+          return c.json({ ok: true, info: { msg: t("error.tokenSuccess") } });
         }
-        return { ok: false, error: data.msg || "验证失败" };
-      } else if (basePlatform === "qq") {
+        return c.json({ ok: false, error: data.msg || t("error.verifyFailed") });
+      } else if (platform === "qq") {
         // v2 鉴权：appID + appSecret → access_token → /users/@me
         const tokenRes = await fetch("https://bots.qq.com/app/getAppAccessToken", {
           method: "POST",
@@ -465,21 +381,42 @@ export default async function bridgeRoute(app, { engine, bridgeManager }) {
         });
         const tokenData = await tokenRes.json();
         if (!tokenData.access_token) {
-          return { ok: false, error: tokenData.message || "获取 access_token 失败" };
+          return c.json({ ok: false, error: tokenData.message || t("error.tokenFetchFailed") });
         }
         const meRes = await fetch("https://api.sgroup.qq.com/users/@me", {
           headers: { Authorization: `QQBot ${tokenData.access_token}` },
         });
         const me = await meRes.json();
         if (me.id) {
-          return { ok: true, info: { username: me.username, name: me.username } };
+          return c.json({ ok: true, info: { username: me.username, name: me.username } });
         }
-        return { ok: false, error: me.message || "获取机器人信息失败" };
-      } else if (basePlatform === "workwechat") {
+        return c.json({ ok: false, error: me.message || t("error.botInfoFailed") });
+      }
+      if (platform === "wechat") {
+        // 用 getconfig 验证 token（不污染 cursor）
+        const crypto = await import("node:crypto");
+        const uin = Buffer.from(String(crypto.randomBytes(4).readUInt32BE(0)), "utf-8").toString("base64");
+        const res = await fetch("https://ilinkai.weixin.qq.com/ilink/bot/getconfig", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "AuthorizationType": "ilink_bot_token",
+            "Authorization": `Bearer ${credentials.botToken}`,
+            "X-WECHAT-UIN": uin,
+          },
+          body: JSON.stringify({ base_info: { channel_version: "1.0.0" } }),
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = await res.json();
+        if (data.ret && data.ret !== 0) {
+          return c.json({ ok: false, error: data.errmsg || `errcode ${data.ret}` });
+        }
+        return c.json({ ok: true, info: { msg: "微信 iLink 连接成功" } });
+      }
+      if (platform === "workwechat") {
         if (!credentials.botId || !credentials.secret) {
-          return { ok: false, error: "botId 和 secret 不能为空" };
+          return c.json({ ok: false, error: "botId 和 secret 不能为空" });
         }
-        console.log(`[bridge test] workwechat testing botId=${credentials.botId}`);
         try {
           const result = await new Promise((resolve) => {
             const reqId = `test_${Date.now()}`;
@@ -490,29 +427,22 @@ export default async function bridgeRoute(app, { engine, bridgeManager }) {
               resolved = true;
               clearTimeout(timer);
               try { ws.terminate(); } catch {}
-              console.log(`[bridge test] workwechat resolved:`, val);
               resolve(val);
             };
             const timer = setTimeout(() => {
-              console.log(`[bridge test] workwechat timeout after 10s`);
               done({ ok: false, error: "连接超时（10s）" });
             }, 10_000);
-
             ws.on("open", () => {
-              console.log(`[bridge test] workwechat WS open, sending subscribe...`);
               const frame = JSON.stringify({
                 cmd: "aibot_subscribe",
                 headers: { req_id: reqId },
                 body: { bot_id: credentials.botId, secret: credentials.secret },
               });
-              console.log(`[bridge test] workwechat sending frame: ${frame.slice(0, 120)}...`);
               ws.send(frame);
             });
-
             ws.on("message", (data) => {
               try {
                 const msg = JSON.parse(data.toString());
-                console.log(`[bridge test] workwechat received:`, data.toString().slice(0, 120));
                 if (msg?.headers?.req_id === reqId) {
                   if (msg.errcode === 0) {
                     done({ ok: true, info: { msg: "订阅成功" } });
@@ -520,68 +450,39 @@ export default async function bridgeRoute(app, { engine, bridgeManager }) {
                     done({ ok: false, error: `errcode=${msg.errcode} ${msg.errmsg || ""}` });
                   }
                 }
-              } catch (err) {
-                console.error(`[bridge test] workwechat parse error:`, err.message);
-                done({ ok: false, error: `解析响应失败: ${err.message}` });
+              } catch {
+                done({ ok: false, error: `解析响应失败` });
               }
             });
-
             ws.on("error", (err) => {
-              console.error(`[bridge test] workwechat WS error:`, err.message);
               done({ ok: false, error: err.message });
             });
-            ws.on("close", (code, reason) => {
-              console.log(`[bridge test] workwechat WS closed: code=${code} reason=${reason || ""}`);
+            ws.on("close", (code) => {
               if (!resolved) done({ ok: false, error: `连接关闭 code=${code}` });
             });
           });
-          return result;
+          return c.json(result);
         } catch (err) {
-          console.error(`[bridge test] workwechat error:`, err.message);
-          return { ok: false, error: err.message };
+          return c.json({ ok: false, error: err.message });
         }
       }
-      return { ok: false, error: "该平台暂不支持测试" };
+      return c.json({ ok: false, error: t("error.platformTestUnsupported") });
     } catch (err) {
-      return { ok: false, error: err.message };
+      return c.json({ ok: false, error: err.message });
     }
   });
 
-  // ── 微信 ClawBot 扫码登录 API ─────────────────────────────
-
-  /** 发起微信扫码登录：获取二维码 */
-  app.post("/api/bridge/wechat-login-start", async () => {
-    const { startWechatLogin } = await import("../../lib/bridge/wechat-adapter.js");
-    const result = await startWechatLogin();
-    return result;
+  /** 获取微信扫码登录二维码 */
+  route.post("/bridge/wechat/qrcode", async (c) => {
+    return c.json(await getWechatQrcode());
   });
 
-  /** 轮询微信扫码结果（长轮询） */
-  app.post("/api/bridge/wechat-login-poll", async (req) => {
-    const { qrcode, timeoutMs } = req.body || {};
-    if (!qrcode) {
-      return { connected: false, message: "qrcode required" };
-    }
-    const { pollWechatLogin } = await import("../../lib/bridge/wechat-adapter.js");
-    const result = await pollWechatLogin({ qrcode, timeoutMs: timeoutMs || 120_000 });
-
-    // 登录成功：自动保存凭证并启动适配器
-    if (result.connected && result.botToken) {
-      const prefs = engine.getPreferences();
-      if (!prefs.bridge) prefs.bridge = {};
-      if (!prefs.bridge.wechat) prefs.bridge.wechat = {};
-      prefs.bridge.wechat.token = result.botToken;
-      if (result.baseUrl) prefs.bridge.wechat.baseUrl = result.baseUrl;
-      prefs.bridge.wechat.enabled = true;
-      prefs.bridge.wechat.accountId = result.accountId || null;
-      prefs.bridge.wechat.userId = result.userId || null;
-      engine.savePreferences(prefs);
-
-      // 自动启动
-      bridgeManager.startPlatformFromConfig("wechat", prefs.bridge.wechat);
-      debugLog()?.log("api", `wechat login success, adapter started`);
-    }
-
-    return result;
+  /** 轮询微信扫码状态 */
+  route.post("/bridge/wechat/qrcode-status", async (c) => {
+    const body = await safeJson(c);
+    const { qrcodeId } = body;
+    return c.json(await pollWechatQrcodeStatus(qrcodeId));
   });
+
+  return route;
 }
