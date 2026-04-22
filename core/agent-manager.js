@@ -92,15 +92,14 @@ export class AgentManager {
 
     const entries = this._scanAgentDirs();
     const initOne = async (agentId) => {
-      const agentDir = path.join(this._d.agentsDir, agentId);
-      const ag = this._createAgentInstance(agentDir, () => ({}));
+      const ag = this._createAgentInstance(agentId, () => ({}));
       ag.setGetOwnerIds(this._makeOwnerIdsFn(ag));
       await ag.init(
         agentId === this._activeAgentId ? log : () => {},
         sharedModels,
         resolveModel,
       );
-      this._agents.set(agentId, ag);
+      this._registerAgent(agentId, ag);
     };
 
     // 焦点 agent 先初始化 — 失败不阻塞启动，让用户能进应用修配置
@@ -113,8 +112,7 @@ export class AgentManager {
       // 关键：必须至少把 config 加载进来，否则 agent.config.models.chat 读不到，
       // 下游会误判为"没配模型"，触发 session 创建跳过 / 记忆系统未启动等连锁崩溃（#414）。
       if (!this._agents.has(this._activeAgentId)) {
-        const agentDir = path.join(this._d.agentsDir, this._activeAgentId);
-        const ag = this._createAgentInstance(agentDir, () => ({}));
+        const ag = this._createAgentInstance(this._activeAgentId, () => ({}));
         ag.setGetOwnerIds(this._makeOwnerIdsFn(ag));
         try {
           ag.loadConfigOnly();
@@ -122,7 +120,7 @@ export class AgentManager {
           console.error(`[agent-manager] fallback loadConfigOnly 也失败: ${cfgErr.message}`);
           if (cfgErr.stack) console.error(cfgErr.stack);
         }
-        this._agents.set(this._activeAgentId, ag);
+        this._registerAgent(this._activeAgentId, ag);
       }
     }
 
@@ -315,10 +313,21 @@ export class AgentManager {
     }
     fs.writeFileSync(path.join(agentDir, "config.yaml"), config, "utf-8");
 
+    // 与 personality/buildSystemPrompt 的 fallback 链保持一致：
+    // yuan 专属（locale 细分） → yuan 专属（通用语言） → 通用 example。
+    // 保证选不同 yuan 时写入的是该 yuan 的默认内容，而不是通用兜底。
+    const isZh = String(currentAgent?.config?.locale || "zh").startsWith("zh");
+    const langDir = isZh ? "" : "en/";
+    const firstExisting = (paths) => paths.find((p) => fs.existsSync(p));
+
     // identity.md
-    const identityTemplate = path.join(this._d.productDir, "identity.example.md");
-    if (fs.existsSync(identityTemplate)) {
-      const tmpl = fs.readFileSync(identityTemplate, "utf-8");
+    const identitySrc = firstExisting([
+      path.join(this._d.productDir, "identity-templates", `${langDir}${yuanType}.md`),
+      path.join(this._d.productDir, "identity-templates", `${yuanType}.md`),
+      path.join(this._d.productDir, "identity.example.md"),
+    ]);
+    if (identitySrc) {
+      const tmpl = fs.readFileSync(identitySrc, "utf-8");
       const filled = tmpl
         .replace(/\{\{agentName\}\}/g, name.trim())
         .replace(/\{\{userName\}\}/g, currentAgent?.userName || t("error.fallbackUserName"));
@@ -326,14 +335,21 @@ export class AgentManager {
     }
 
     // ishiki.md
-    const ishikiSrc = path.join(this._d.productDir, "ishiki.example.md");
-    if (fs.existsSync(ishikiSrc)) {
+    const ishikiSrc = firstExisting([
+      path.join(this._d.productDir, "ishiki-templates", `${langDir}${yuanType}.md`),
+      path.join(this._d.productDir, "ishiki-templates", `${yuanType}.md`),
+      path.join(this._d.productDir, "ishiki.example.md"),
+    ]);
+    if (ishikiSrc) {
       fs.copyFileSync(ishikiSrc, path.join(agentDir, "ishiki.md"));
     }
 
     // public-ishiki.md（对外意识模板）
-    const publicIshikiSrc = path.join(this._d.productDir, "public-ishiki-templates", `${yuanType}.md`);
-    if (fs.existsSync(publicIshikiSrc)) {
+    const publicIshikiSrc = firstExisting([
+      path.join(this._d.productDir, "public-ishiki-templates", `${langDir}${yuanType}.md`),
+      path.join(this._d.productDir, "public-ishiki-templates", `${yuanType}.md`),
+    ]);
+    if (publicIshikiSrc) {
       fs.copyFileSync(publicIshikiSrc, path.join(agentDir, "public-ishiki.md"));
     }
 
@@ -345,7 +361,7 @@ export class AgentManager {
     this._d.getChannelManager().setupChannelsForNewAgent(agentId);
 
     // 初始化并加入长驻 Map
-    const ag = this._createAgentInstance(agentDir, () => ({}));
+    const ag = this._createAgentInstance(agentId, () => ({}));
     ag.setGetOwnerIds(this._makeOwnerIdsFn(ag));
     const resolveModel = (bareId) =>
       this._d.getModels().resolveModelWithCredentials(bareId);
@@ -367,7 +383,7 @@ export class AgentManager {
         throw err;
       }
     }
-    this._agents.set(agentId, ag);
+    this._registerAgent(agentId, ag);
 
     // 启动 cron + heartbeat
     const hub = this._d.getHub();
@@ -569,13 +585,24 @@ export class AgentManager {
     };
   }
 
-  _createAgentInstance(agentDir, getOwnerIds) {
+  /**
+   * 注册 agent 到长驻 Map，写入前校验 id 与实例字段一致。
+   * 防止未来某次改动让 Map key 和 agent.id 错位（这是过去 agent.id=undefined 类 bug 的温床）。
+   */
+  _registerAgent(agentId, ag) {
+    if (ag.id !== agentId) {
+      throw new Error(`agent id mismatch: map key "${agentId}" vs instance.id "${ag.id}"`);
+    }
+    this._agents.set(agentId, ag);
+  }
+
+  _createAgentInstance(agentId, getOwnerIds) {
     const ag = new Agent({
-      agentDir,
+      id: agentId,
+      agentsDir: this._d.agentsDir,
       productDir: this._d.productDir,
       userDir: this._d.userDir,
       channelsDir: this._d.channelsDir,
-      agentsDir: this._d.agentsDir,
       searchConfigResolver: () => this._d.getSearchConfig(),
     });
     ag.setGetOwnerIds(getOwnerIds);
@@ -595,6 +622,7 @@ export class AgentManager {
       getCurrentModelId:    () => getEngine()?.currentModel?.id ?? null,
       getSkillsDir:         () => getEngine()?.skillsDir ?? null,
       getLearnSkills:       () => getEngine()?.getLearnSkills?.() ?? {},
+      isChannelsEnabled:    () => getEngine()?.isChannelsEnabled?.() ?? false,
       resolveUtilityConfig: () => getEngine()?.resolveUtilityConfig?.(),
       getCwd:               () => getEngine()?.cwd ?? "",
       getTimezone:          () => getEngine()?.getTimezone?.() ?? "",
@@ -612,7 +640,7 @@ export class AgentManager {
       this._d.getHub()?.eventBus?.emit({ type: "notification", title, body }, null);
     });
     ag.setDescriptionRefreshHandler(() => {
-      this._refreshDescription(path.basename(ag.agentDir)).catch(() => {});
+      this._refreshDescription(ag.id).catch(() => {});
     });
     return ag;
   }
