@@ -36,6 +36,8 @@ node_modules/
 
 # IDE / 工具
 .claude/
+.codebuddy/
+.github/
 *.code-workspace
 
 # 项目私有文件
